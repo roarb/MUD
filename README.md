@@ -33,7 +33,7 @@ A multi-agent text-based dungeon crawler where AI agents collaborate to create a
 │  │  3a. WORLD BUILDER   3b. SHOWRUNNER                     │ │
 │  │      (Agent 2)           (Agent 3)                      │ │
 │  │      Room descriptions   Flavor text + achievements     │ │
-│  │          │                  │          (run in parallel) │ │
+│  │          │                + bonus XP   (run in parallel) │ │
 │  │          └──────┬───────────┘                            │ │
 │  │                 ▼                                        │ │
 │  │  4. GAME MASTER ──► Compiles final player-facing text   │ │
@@ -51,7 +51,7 @@ A multi-agent text-based dungeon crawler where AI agents collaborate to create a
 1. Player types `attack goblin` in browser terminal
 2. **Agent 1** (Input Parser) → `{ "action": "attack", "target": "goblin" }`
 3. **Game Engine** resolves combat using deterministic rules (damage, HP, XP, loot)
-4. **Agent 2** (World Builder) + **Agent 3** (Showrunner) run **in parallel** — atmospheric room description + sarcastic flavor text + achievement detection
+4. **Agent 2** (World Builder) + **Agent 3** (Showrunner) run **in parallel** — atmospheric room description + sarcastic flavor text + achievement detection + bonus XP evaluation for creative actions
 5. **Agent 4** (Game Master) compiles everything into cohesive output → browser
 
 ---
@@ -81,7 +81,7 @@ MUD/
 │       ├── llmClient.js      # LLM API wrapper (OpenAI/Anthropic + fallback)
 │       ├── inputParser.js    # Agent 1: text → JSON intent
 │       ├── worldBuilder.js   # Agent 2: game state → room description
-│       ├── showrunner.js     # Agent 3: events → flavor text + achievements
+│       ├── showrunner.js     # Agent 3: events → flavor text + achievements + bonus XP
 │       ├── gameMaster.js     # Agent 4: compile final output
 │       └── agentPipeline.js  # Orchestrates all agents
 └── client/
@@ -243,6 +243,27 @@ Open **http://localhost:3000** in your browser. Enter a crawler name and start e
 | `talk <npc>`               | `talk to merchant`          | Talk to an NPC                  |
 
 With the LLM enabled, you can use natural language — the Input Parser agent translates it for you.
+
+---
+
+## XP & Leveling
+
+Players earn XP from three sources:
+
+| Source | Details |
+|---|---|
+| **Combat kills** | Each entity has an `xpReward` value awarded on death |
+| **Loot boxes** | Opening a loot box awards tier-based XP: iron (10), bronze (25), silver (50), gold (100) |
+| **Bonus XP** ⚡ | The Showrunner AI evaluates creative/unusual player actions and can award 10–50 bonus XP with a sarcastic reason from The System |
+
+**Level-up formula:** `XP needed = current_level × 100`
+
+Each level-up grants:
+- **+2 stat points** (allocate with `allocate <stat>`)
+- **Recalculated max HP** (`50 + CON×2 + level×5`)
+- **Full HP heal**
+
+> **Note:** Bonus XP requires an LLM API key. Without one, XP comes only from combat kills and loot boxes.
 
 ---
 

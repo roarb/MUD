@@ -108,4 +108,80 @@ async function checkAchievement(events, player) {
     return null;
 }
 
-module.exports = { generateFlavorText, checkAchievement };
+// ============================================================
+// BONUS XP EVALUATION — Reward creative / out-of-the-ordinary play
+// ============================================================
+const BONUS_XP_SYSTEM_PROMPT = `You are the System — the alien AI running a televised death game. You can award BONUS XP to crawlers who do something creative, crazy, unexpected, or genuinely impressive.
+
+You will receive:
+1. RAW_INPUT: The exact text the player typed.
+2. EVENTS: The game events that resulted from the action.
+3. PLAYER_LEVEL: The player's current level.
+
+DECIDE if the player's action deserves bonus XP. Award XP for things like:
+- Creative problem-solving or unusual approaches
+- Trying something wild, risky, or entertainingly stupid
+- Actions that would excite the galactic audience
+- Clever use of the environment or items
+- Hilarious roleplay or dramatic flair
+
+DO NOT award XP for routine actions like: basic movement, looking around, checking stats/inventory, standard attacks with no flair, or picking up items normally.
+
+IF bonus XP is warranted, return EXACTLY this JSON:
+{"award": true, "amount": <10-50>, "reason": "<sarcastic 1-sentence reason>"}
+
+IF no bonus XP is warranted, return EXACTLY:
+{"award": false}
+
+AMOUNT GUIDELINES:
+- 10-15 XP: Mildly creative or amusing
+- 20-30 XP: Genuinely clever or entertainingly reckless
+- 35-50 XP: Absolutely unhinged brilliance that has the galactic audience on their feet
+
+RULES:
+- Be selective. Not every action deserves a bonus. Maybe 1 in 5 creative attempts.
+- Return ONLY valid JSON. No explanation.`;
+
+/**
+ * Evaluate whether the player's action deserves bonus XP.
+ * @param {string} rawInput - The player's raw text input
+ * @param {Array} events - Game events that resulted
+ * @param {object} player - Current player state
+ * @returns {object|null} { amount, reason } or null
+ */
+async function evaluateBonusXp(rawInput, events, player) {
+    // Skip evaluation for mundane actions
+    const mundaneActions = ['look', 'inventory', 'stats'];
+    const isOnlyMundane = events.every(e =>
+        ['room_description', 'inventory_list', 'stats_display', 'error'].includes(e.type)
+    );
+    if (isOnlyMundane) return null;
+
+    const payload = {
+        rawInput,
+        events: events.filter(e => e.type !== 'error'),
+        playerLevel: player.level,
+    };
+
+    const response = await callLLM(BONUS_XP_SYSTEM_PROMPT, JSON.stringify(payload), {
+        temperature: 0.7,
+        maxTokens: 150,
+    });
+
+    try {
+        const cleaned = response.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+        const result = JSON.parse(cleaned);
+        if (result.award && result.amount > 0) {
+            return {
+                amount: Math.min(50, Math.max(1, result.amount)),
+                reason: result.reason || 'The System is mildly impressed.',
+            };
+        }
+    } catch (err) {
+        console.warn('[Showrunner] Failed to parse bonus XP response:', response);
+    }
+
+    return null;
+}
+
+module.exports = { generateFlavorText, checkAchievement, evaluateBonusXp };

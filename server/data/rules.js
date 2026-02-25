@@ -80,6 +80,13 @@ function rollLoot(lootTable) {
     return entries[entries.length - 1].itemId; // fallback
 }
 
+// --- Loot box XP rewards by tier ---
+const LOOTBOX_XP = { iron: 10, bronze: 25, silver: 50, gold: 100 };
+
+function lootboxXpReward(tier) {
+    return LOOTBOX_XP[tier] || 10;
+}
+
 module.exports = {
     BASE_STAT,
     STAT_POINTS_PER_LEVEL,
@@ -95,4 +102,5 @@ module.exports = {
     createStartingStats,
     allocateStatPoint,
     rollLoot,
+    lootboxXpReward,
 };

@@ -526,6 +526,15 @@ async function handleOpenLootbox(player, intent) {
         });
     }
 
+    // Award XP for opening the loot box
+    const lootboxXp = rules.lootboxXpReward(box.tier);
+    player.xp += lootboxXp;
+    events.push({ type: 'lootbox_xp', amount: lootboxXp, tier: box.tier, totalXp: player.xp });
+
+    // Check for level-up from lootbox XP
+    const levelUpEvents = checkLevelUp(player);
+    events.push(...levelUpEvents);
+
     playerState.addEvent(player, { type: 'open_lootbox', box: box.name, received: lootItem ? lootItem.name : 'nothing' });
     await playerState.savePlayer(player);
 
@@ -592,4 +601,4 @@ function checkLevelUp(player) {
     return events;
 }
 
-module.exports = { processAction };
+module.exports = { processAction, checkLevelUp };

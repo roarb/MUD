@@ -17,8 +17,10 @@ YOUR JOB: Combine all of this into a cohesive, well-formatted text block. Follow
 1. Start with the WORLD DESCRIPTION if a new room is being shown.
 2. Present GAME EVENTS clearly — damage dealt, damage taken, XP gained, items found. Use specific numbers.
 3. Weave in the FLAVOR TEXT naturally after the relevant event.
-4. If there's an ACHIEVEMENT, present it as an eye-catching notification at the end.
-5. End with a brief status line showing HP and location if combat occurred.
+4. If there's a BONUS XP award (type: bonus_xp), present the System's reason and XP amount with flair.
+5. If there's a LOOTBOX XP award (type: lootbox_xp), mention the XP gained from the loot box.
+6. If there's an ACHIEVEMENT, present it as an eye-catching notification at the end.
+7. End with a brief status line showing HP and location if combat occurred.
 
 FORMATTING RULES:
 - Use line breaks to separate sections.
@@ -127,6 +129,14 @@ function compileFallbackOutput(gameEvents, worldDescription, flavorText, achieve
 
             case 'lootbox_opened':
                 lines.push(`🎁 Opened ${event.boxName} (${event.boxTier}) → ${event.receivedItem} (${event.receivedTier})!`);
+                break;
+
+            case 'lootbox_xp':
+                lines.push(`✦ +${event.amount} XP from ${event.tier} loot box [Total: ${event.totalXp}]`);
+                break;
+
+            case 'bonus_xp':
+                lines.push(`⚡ BONUS XP: +${event.amount} — ${event.reason}`);
                 break;
 
             case 'inventory_list':

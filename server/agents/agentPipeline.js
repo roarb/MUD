@@ -4,9 +4,9 @@
 // ============================================================
 const { parseInput } = require('./inputParser');
 const { describeRoom } = require('./worldBuilder');
-const { generateFlavorText, checkAchievement } = require('./showrunner');
+const { generateFlavorText, checkAchievement, evaluateBonusXp } = require('./showrunner');
 const { compileFinalOutput, compileFallbackOutput } = require('./gameMaster');
-const { processAction } = require('../engine/gameEngine');
+const { processAction, checkLevelUp } = require('../engine/gameEngine');
 const { getDoc } = require('../firebase');
 const playerState = require('../engine/playerState');
 
@@ -50,6 +50,7 @@ async function runPipeline(playerId, userInput) {
         let worldDescription = '';
         let flavorText = '';
         let achievement = null;
+        let bonusXp = null;
 
         if (USE_LLM) {
             const promises = [];
@@ -73,12 +74,30 @@ async function runPipeline(playerId, userInput) {
                 checkAchievement(events, updatedPlayer).then(ach => { achievement = ach; })
             );
 
+            // Showrunner — bonus XP for creative actions
+            promises.push(
+                evaluateBonusXp(userInput, events, updatedPlayer).then(bxp => { bonusXp = bxp; })
+            );
+
             await Promise.all(promises);
 
             // Save achievement to player if awarded
             if (achievement) {
                 updatedPlayer.achievements = updatedPlayer.achievements || [];
                 updatedPlayer.achievements.push(achievement);
+            }
+
+            // Apply bonus XP if awarded
+            if (bonusXp) {
+                updatedPlayer.xp += bonusXp.amount;
+                events.push({ type: 'bonus_xp', amount: bonusXp.amount, reason: bonusXp.reason, totalXp: updatedPlayer.xp });
+
+                const levelUpEvents = checkLevelUp(updatedPlayer);
+                events.push(...levelUpEvents);
+            }
+
+            // Persist player if achievement or bonus XP changed state
+            if (achievement || bonusXp) {
                 await playerState.savePlayer(updatedPlayer);
             }
 
