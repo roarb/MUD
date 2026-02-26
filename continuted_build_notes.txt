@@ -1,9 +1,291 @@
-ability to create images and dispaly them
+1) ability to create images and dispaly them
 
-describe your character at the start
+2) describe your character at the start
 
-resume a crawl?
+        Here is the system architecture for how to turn a user’s natural language description into a hard-coded character sheet.
 
-conversation with npc's doesn't' really work - give them all some agency? a pool of NPC's with name's and backstories
+        1. The Onboarding Flow
+        Instead of a name field and a bio field, the game starts with a terminal prompt:
 
-if there's not an action from the user for 2 seconds, populate buttons that show relavent actions to the current situation
+        SYSTEM AI: "Name and physical description for the insurance forms, meatbag. Don't lie; I can see you. Tell me who you are, what you did before the world ended, and what you’re wearing."
+
+        The user might type:
+
+        "My name is Rob. I'm a long-distance trail runner from Wisconsin. I'm tall, lean, and I'm currently wearing a pair of salt-stained running shorts, a hydration vest, and some muddy trail shoes."
+
+        2. The Logic: "The Interpreter" Agent
+        You’ll use an LLM agent (The Interpreter) to take that block of text and map it to your game’s variables. This agent doesn't talk to the player; it just outputs JSON for your database.
+
+        The Prompt for the Interpreter:
+
+        "Analyze the user's character description. Map their traits to the following attributes (Base 10). Adjust stats +/- 3 based on their background. Assign one primary 'Starting Skill' from the list. Output strictly in JSON."
+
+        The Resulting Payload:
+
+        JSON
+        {
+        "name": "Rob",
+        "gender": "Male",
+        "stats": {
+        "Strength": 9,
+        "Dexterity": 13, 
+        "Constitution": 12,
+        "Intelligence": 10,
+        "Charisma": 10
+        },
+        "visuals": "Tall, lean, muddy trail-running gear",
+        "starting_skills": ["Sprint", "Endurance"],
+        "starting_inventory": ["Hydration Vest (Empty)", "Muddy Trail Shoes"]
+        }
+        3. Stat Mapping Logic
+        To keep the game balanced while still feeling reactive, use a "Zero-Sum" or "Weighted" mapping system:
+
+        Keywords: If the AI sees keywords like runner, agile, quick, or lithe, it boosts Dexterity and Constitution but may slightly nerf Strength.
+
+        Backgrounds: If the user mentions a profession (e.g., "I was a nurse"), it automatically grants the First Aid skill and a +2 to Intelligence.
+
+        Appearance: Descriptions of size (e.g., "I'm a huge guy") boost Strength and HP but set a penalty for Sneak and Dodge.
+
+        4. The "System AI" Feedback Loop
+        Once the Interpreter agent generates the JSON, the System Showrunner Agent (the sarcastic one) presents the result back to the player. This is where the Dungeon Crawler Carl flavor really kicks in.
+
+        SYSTEM AI: "Processed. Registered as: Rob, the Sweaty Pedestrian.
+
+        I've adjusted your stats. You've got the legs of a gazelle but the upper body strength of a wet noodle. I see you're wearing 'Hydration Vest.' Cute. I've tagged that as 'Light Armor (Useless).'
+
+        Skill Gained: [Marathoner's Grit] — You're used to suffering for long periods. Your stamina decays 10% slower, but you smell 20% worse.
+
+        Do you accept these terms, or should I just let the ceiling collapse now?"
+
+        5. Why this works for your Web-Browser Game:
+        Low Friction: The player just "talks" to the game to start.
+
+        Persistent World Seed: That visuals string stays in the database. When other players "Inspect" Rob in the MUD, the AI will use that string to describe him to them.
+
+        Dynamic Balance: You can hard-code limits so the AI can't give anyone more than 40 total stat points, ensuring no one starts as a god.
+
+3) Starting Skills:
+        To make a Dungeon Crawler Carl style game feel reactive and high-stakes, the starting skills should represent the raw desperation of a "level zero" crawler. In a text-based MUD, these skills won't just be buttons to click—they will be the variables the AI Director uses to calculate if a player's crazy plan actually succeeds or ends in a gruesome notification.
+        Here is a comprehensive list of universal starting skills, categorized by how they influence the game’s probability engine.
+
+        1. Survival & Recovery
+        These skills determine how long a crawler can stay in the fight without a dedicated healer class.
+
+        First Aid (Medicine): The ability to use rags, duct tape, or basic med-kits to stop bleeding and stabilize wounds.
+
+        AI Logic: Increases the probability that a "Critical Wound" (e.g., Mangled Leg) is downgraded to a "Severe Wound," preventing permanent stat loss.
+
+        Scavenge: The art of finding utility in trash.
+
+        AI Logic: When a player searches a node (e.g., "I look through the rubble"), this skill increases the chance of finding "Functional Junk" (like a sharp piece of rebar) instead of just "Debris."
+
+        Improvise: Using non-weapon items in combat (e.g., throwing a brick or using a trash can lid as a shield).
+
+        AI Logic: Offsets the "Improper Tool" penalty, giving a higher hit-success rate when the player isn't using a real weapon.
+
+        2. Athleticism & Movement
+        In the early levels of a crawl, movement is often more important than combat.
+
+        Dodge: A passive and active skill for avoiding incoming projectiles or melee swings.
+
+        AI Logic: Checks against the enemy’s "Accuracy" stat to determine a Miss, Glancing Blow, or Full Hit.
+
+        Sprint: A high-stamina-drain burst of speed.
+
+        AI Logic: Essential for the "Crawl" feel. It increases the success rate of moving between nodes while under fire, or closing the distance to a ranged enemy before they can fire again.
+
+        Flee: A desperate attempt to break combat and exit to a connected node.
+
+        AI Logic: This should have a high failure rate but be influenced by this skill. A failed flee might leave the player "Prone" or "Stunned," giving the AI a chance to generate a sarcastic death message.
+
+        Vault/Climb: Navigating vertical or cluttered terrain.
+
+        AI Logic: Opens up hidden "High Ground" positions within a text-room, which might grant a "Tactical Advantage" bonus to other actions.
+
+        3. Perception & Tactical
+        These skills feed the "Input Parser" more information about the world.
+
+        Inspect: The basic "Look" command but with a mechanical edge.
+
+        AI Logic: At higher levels, this reveals hidden enemy stats (HP, Resistances) and trap triggers that aren't mentioned in the default room description.
+
+        Sense Danger (Intuition): A passive skill that occasionally fires before a player enters a room or performs an action.
+
+        AI Logic: The AI Director can "whisper" a warning to the player (e.g., "The hair on your neck stands up as you look at the dark vent"), giving them a chance to change their action.
+
+        Sneak: Reducing the "Noise" or "Presence" footprint of a crawler.
+
+        AI Logic: Determines if a mob in a node notices the player entering. Success allows for a "Surprise Attack" round.
+
+        4. "The System" (Showmanship)
+        Since this is a televised crawl, the AI cares about how things are done. These skills are unique to the DCC-style "Entertainment" mechanic.
+
+        Taunt: Purposefully drawing aggression or "Aggro."
+
+        AI Logic: In a text-based environment, this forces a mob to target the player. If the Taunt is creative (processed by the LLM), the AI might grant a temporary "Fan Favor" buff.
+
+        Flair: The ability to perform standard actions with unnecessary style.
+
+        AI Logic: This doesn't necessarily make an attack stronger, but it increases the "Entertainment Value" of an event. This is the primary driver for the AI Director to grant higher-tier Loot Boxes or Achievements.
+
+        The Probability Mechanic
+        In your web-browser engine, these skills would work as a Success Threshold.
+
+        For example, if a player tries to Flee from a Scavenger Goblin:
+
+        Base Difficulty: 60% (The goblin is fast).
+
+        Skill Modifier: +15% (Player has Level 3 'Flee').
+
+
+4) Stats viewing and selection - how do they make a difference
+
+        Here is how the stat-to-gameplay loop should function for both crawlers and the monsters they face.
+
+        ### 1. The Core Attributes (The Big Six)
+
+        Since we are starting at a base of **10**, this represents a "baseline healthy human." Anything above 10 is superhuman; anything below is a disability.
+
+        | Stat | Gameplay Impact | AI Narrative Trigger |
+        | --- | --- | --- |
+        | **Strength (STR)** | Physical damage, carry capacity, door-bashing success. | "You rip the rebar from the wall with terrifying ease." |
+        | **Dexterity (DEX)** | Hit chance, dodge probability, initiative (who goes first). | "You move like a blur, the goblin's spear tasting only air." |
+        | **Constitution (CON)** | Total HP, stamina pool, resistance to poison/bleeding. | "The venom burns, but your heart refuses to stop." |
+        | **Intelligence (INT)** | Mana pool, spell potency, success in identifying traps/loot. | "The runes on the box start to make a twisted kind of sense." |
+        | **Wisdom (WIS)** | Mana regeneration, "Sense Danger" proc rate, mental resistance. | "You feel the trap click before your foot even touches the tile." |
+        | **Charisma (CHA)** | Shop prices, "Fan Favor" gain rate, pet/NPC loyalty. | "The audience loves that cocky grin. A loot box drops." |
+
+        ---
+
+        ### 2. How Stats Affect the Combat Loop
+
+        In your backend, combat shouldn't just be `Attack - Defense`. It should be a **Contested Roll**.
+
+        * **Player vs. Monster:** If a player with **14 STR** hits a goblin with **8 CON**, the AI calculates a "Massive Impact." The resulting text output might describe bones shattering.
+        * **Monster vs. Player:** If a Boss with **20 DEX** attacks a player with **10 DEX**, the player essentially cannot dodge manually. They must rely on skills (like *Dodge* or *Sprint*) to artificially pad that probability gap.
+
+        ---
+
+        ### 3. Viewing and Modifying Stats
+
+        In a MUD, the interface is your "Menu."
+
+        #### The View: The "Status" Command
+
+        When a player types `status` or `stats`, they shouldn't just see a boring list. The **System Showrunner Agent** should deliver it with flavor:
+
+        > **SYSTEM AI:** "Oh, you want to see how pathetic you are? Fine."
+        > **STR:** 10 | **DEX:** 13 (Runner's Edge) | **CON:** 11
+        > **Health:** 45/45 | **Stamina:** 80/80
+        > **Current Burden:** 15% (You're carrying a lot of trash, Rob.)
+
+        #### The Modification: Leveling Up
+
+        In DCC, leveling up is a violent, euphoric experience. When a player hits a new level:
+
+        1. **Automatic Gains:** Every level grants +1 to CON and +5 to total HP/Stamina automatically.
+        2. **Manual Allocation:** The player receives **3 Stat Points**.
+        3. **The Process:** They must "spend" them via the terminal: `increase STR 2`, `increase DEX 1`.
+        4. **The Narrative:** The AI Director should describe the physical change: *"Your muscles fiber-stitch themselves into denser cords. You feel... heavier. Stronger."*
+
+        ---
+
+        ### 4. Monster Stats: The "Invisible" Threat
+
+        Monsters need stats to keep the world consistent, but the player shouldn't see them immediately. This creates a "Knowledge Gap" that drives gameplay.
+
+        * **Level 0 Inspect:** "It's a Scavenger Goblin. It looks hungry."
+        * **Level 5 Inspect (High INT/WIS):** "Scavenger Goblin. STR: 8, DEX: 14. It’s faster than you, but one solid hit will break it."
+
+        **Monster Stat Scaling:**
+
+        * **Subway Thugs:** High STR/CON, Low INT. They are easy to trick but hard to tank.
+        * **The First Floor Boss:** Should have at least one stat in the **25+ range**, forcing players to use their environment (like the subway tracks) rather than a direct stat-vs-stat fight.
+
+        ### 5. The "Primal Degeneration" Modifier (Hidden Stat)
+
+        As the game progresses, the AI Director (the LLM) has a hidden **Entropy Stat**. As this rises, the AI starts ignoring the math. It might give a monster +10 STR mid-fight just because it's bored, or nerf a player's DEX because it thinks their "running away" tactic is cowardly.
+
+
+5) resume a crawl?
+
+6) conversation with npc's doesn't' really work - give them all some agency? a pool of NPC's with name's and backstories and stats and skills
+
+7) if there's not an action from the user for 2 seconds, populate buttons that show relavent actions to the current situation
+
+8) damage shouldn't be static - if a weapon does 3, the weilder's strength would affect that value and the whole thing should have a percentage range - round to nearest thenth
+
+        Here is the mechanical breakdown of how a single attack should be calculated, from the moment a player types `attack goblin` to the moment the AI describes the blood on the floor.
+
+        ---
+
+        ### 1. The Damage Formula (The Skeleton)
+
+        Instead of a flat number, every weapon or natural attack (like a punch) should have a **Base Dice Range**.
+
+        * **Bare Fists:** $1d4$ (1–4 damage)
+        * **Improvised Rebar Club:** $1d8$ (1–8 damage)
+        * **Standard Survival Knife:** $1d6 + 2$ (3–8 damage)
+
+        **The Calculation:**
+
+
+        $$\text{Total Damage} = (\text{Base Dice Roll} + \text{Stat Modifier}) \times \text{Multiplier}$$
+
+        * **Stat Modifier:** For every 2 points above the baseline (10), add +1 to the damage. (e.g., **14 STR** = **+2 Damage**).
+        * **The Multiplier:** This is where **Skills** and **Critical Hits** come in. If a player has a high "Brawl" skill, they might get a $1.2x$ multiplier.
+
+        ---
+
+        ### 2. The Mitigation Layers (The Armor & Agility)
+
+        Damage isn't just "dealt"; it has to pass through the target's defenses.
+
+        #### Layer A: The "Evasion" Check (DEX vs. DEX)
+
+        Before damage is even rolled, the engine checks if the hit connects.
+
+        * **Calculation:** `Attacker_DEX` vs `Defender_DEX + Dodge_Skill`.
+        * **Outcome:** If the defender wins by a wide margin, it’s a **"Clean Miss."** If they win by a small margin, it’s a **"Glancing Blow"** (50% damage reduction).
+
+        #### Layer B: The "Damage Reduction" (Armor)
+
+        If the hit connects, the armor absorbs a flat value or a percentage.
+
+        * **Physical Armor (e.g., Tactical Vest):** Subtracts a flat number from the incoming damage.
+        * **Natural Armor (e.g., Goblin Hide):** Reduces damage by a percentage (e.g., 10%).
+
+        ---
+
+        ### 3. Putting it Together: An Example Turn
+
+        Let's look at **Rob** (STR 14, DEX 12) attacking a **Subway Thug** (CON 12, DEX 10, wearing Scavenged Leather).
+
+        1. **The Intent:** Rob types `attack thug with rebar`.
+        2. **The Hit Roll:** Rob's DEX (12) vs Thug's DEX (10). Rob rolls a 15, Thug rolls a 12. **Hit Confirmed.**
+        3. **The Raw Damage:** * Rebar Base ($1d8$): Rolls a **6**.
+        * STR Modifier (14 STR): **+2**.
+        * **Total Raw:** **8 Damage.**
+
+
+        4. **The Mitigation:** * The Thug's Leather Armor has a **-2 Damage Reduction**.
+        * **Final Damage Dealt:** **6 HP.**
+
+
+        5. **The System AI Output:**
+        > **SYSTEM AI:** "You swing that rusty piece of Wisconsin infrastructure like a pro. It crunches into the thug's shoulder, bypassing his pathetic leather vest. He grunts, and you see a satisfying spray of red on the subway tiles. **-6 HP.**"
+
+
+
+        ---
+
+        ### 4. The "Crit" and "Fumble" (The Entertainment Factor)
+
+        Since this is a televised game, the AI Director (LLM) should have a "Luck" modifier that triggers on extreme rolls (1 or 20).
+
+        * **Critical Success (Natural 20):** The AI ignores the Thug's armor entirely and describes a gruesome, high-entertainment execution.
+        * **Critical Failure (Natural 1):** The "Primal Degeneration" kicks in. Maybe your rebar snaps, or you trip over your own muddy trail shoes and take 2 damage yourself.
+
+        ### 5. Managing Your Stats in the MUD
+
+        To keep track of this
