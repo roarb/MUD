@@ -15,6 +15,8 @@ const { initFirebase } = require('./firebase');
 const typeDefs = require('./schema');
 const resolvers = require('./resolvers');
 const { runPipeline } = require('./agents/agentPipeline');
+const { interpretCharacter } = require('./agents/interpreter');
+const { generateCharacterCommentary } = require('./agents/showrunner');
 const { createPlayer, loadPlayer } = require('./engine/playerState');
 const { getDoc } = require('./firebase');
 const { MAP_NODES } = require('./data/seedData');
@@ -42,6 +44,9 @@ async function startServer() {
     // --- Serve static frontend ---
     app.use(express.static(path.join(__dirname, '../client')));
 
+    // --- Serve generated images ---
+    app.use('/images', express.static(path.join(__dirname, 'generated_images')));
+
     // --- Health check ---
     app.get('/health', (req, res) => {
         res.json({ status: 'ok', firebase: !!db });
@@ -53,15 +58,57 @@ async function startServer() {
     wss.on('connection', (ws) => {
         console.log('[WS] New connection');
         let playerId = null;
+        let pendingCharacterData = null;  // Holds parsed data during onboarding
 
         ws.on('message', async (data) => {
             try {
                 const msg = JSON.parse(data.toString());
 
-                // --- CREATE or LOAD player ---
+                // --- Step 1: DESCRIBE CHARACTER (parse + preview) ---
                 if (msg.type === 'create_player') {
-                    const player = await createPlayer(msg.name || 'Crawler');
+                    ws.send(JSON.stringify({ type: 'processing', active: true }));
+
+                    const description = msg.description || msg.name || 'A nameless survivor';
+                    console.log('[WS] Character description received:', description.substring(0, 80));
+
+                    // Run the Interpreter agent
+                    const characterData = await interpretCharacter(description);
+                    console.log('[WS] Interpreter result:', JSON.stringify(characterData));
+
+                    // Store pending data for confirmation
+                    pendingCharacterData = characterData;
+
+                    // Generate Showrunner commentary
+                    let commentary = '';
+                    const USE_LLM = process.env.LLM_API_KEY && process.env.LLM_API_KEY !== 'your_api_key_here';
+                    if (USE_LLM) {
+                        commentary = await generateCharacterCommentary(characterData);
+                    } else {
+                        commentary = `Processed. Registered as: ${characterData.name}.\n\nStats allocated. Skills assigned. Gear logged.\n\nDo you accept these terms?`;
+                    }
+
+                    ws.send(JSON.stringify({
+                        type: 'character_preview',
+                        characterData,
+                        commentary,
+                    }));
+
+                    ws.send(JSON.stringify({ type: 'processing', active: false }));
+                    return;
+                }
+
+                // --- Step 2: CONFIRM CHARACTER (create + start game) ---
+                if (msg.type === 'confirm_character') {
+                    if (!pendingCharacterData) {
+                        ws.send(JSON.stringify({ type: 'error', message: 'No character data pending. Describe your character first.' }));
+                        return;
+                    }
+
+                    ws.send(JSON.stringify({ type: 'processing', active: true }));
+
+                    const player = await createPlayer(pendingCharacterData.name, pendingCharacterData);
                     playerId = player.id;
+                    pendingCharacterData = null;  // Clear pending data
 
                     const mapTopology = MAP_NODES.map(n => ({
                         id: n.nodeId,
@@ -86,7 +133,10 @@ async function startServer() {
                         text: result.text,
                         player: sanitizePlayer(result.player),
                         achievement: result.achievement,
+                        imageUrl: result.imageUrl || null,
                     }));
+
+                    ws.send(JSON.stringify({ type: 'processing', active: false }));
                     return;
                 }
 
@@ -121,6 +171,7 @@ async function startServer() {
                         text: result.text,
                         player: sanitizePlayer(result.player),
                         achievement: result.achievement,
+                        imageUrl: result.imageUrl || null,
                     }));
                     return;
                 }
@@ -142,6 +193,7 @@ async function startServer() {
                         text: result.text,
                         player: sanitizePlayer(result.player),
                         achievement: result.achievement,
+                        imageUrl: result.imageUrl || null,
                     }));
 
                     ws.send(JSON.stringify({ type: 'processing', active: false }));
@@ -181,6 +233,8 @@ function sanitizePlayer(player) {
     return {
         id: player.id,
         name: player.name,
+        gender: player.gender || 'Unknown',
+        visuals: player.visuals || '',
         level: player.level,
         xp: player.xp,
         hp: player.hp,
@@ -189,6 +243,7 @@ function sanitizePlayer(player) {
         alive: player.alive,
         explored: player.explored || [],
         statPointsAvailable: player.statPointsAvailable || 0,
+        skills: player.skills || null,
     };
 }
 

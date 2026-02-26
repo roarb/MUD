@@ -8,9 +8,15 @@ const LLM_PROVIDER = process.env.LLM_PROVIDER || 'openai';
 const LLM_API_KEY = process.env.LLM_API_KEY;
 const LLM_MODEL = process.env.LLM_MODEL || 'gpt-4o-mini';
 
+const IMAGE_GENERATION_ENABLED = process.env.IMAGE_GENERATION_ENABLED !== 'false';
+
+// Style prefix for all generated images
+const IMAGE_STYLE_PREFIX = 'Storybook illustration, ink line drawing with soft watercolor washes and cel-shading, muted earth tones with splashes of vibrant color, fantasy dungeon crawler scene. ';
+
 // Endpoint mapping for providers
 const ENDPOINTS = {
     openai: 'https://api.openai.com/v1/chat/completions',
+    openaiImages: 'https://api.openai.com/v1/images/generations',
     anthropic: 'https://api.anthropic.com/v1/messages',
 };
 
@@ -199,4 +205,61 @@ function generateFallbackIntent(input) {
     return JSON.stringify({ action: 'unknown', text: input });
 }
 
-module.exports = { callLLM };
+// --- OpenAI Image Generation ---
+/**
+ * Generate an image using OpenAI's gpt-image-1 model.
+ * @param {string} prompt - Scene description to illustrate
+ * @returns {string|null} Base64-encoded PNG data, or null on failure
+ */
+async function generateImage(prompt) {
+    if (!IMAGE_GENERATION_ENABLED) {
+        console.log('[Image] Image generation disabled');
+        return null;
+    }
+
+    if (!LLM_API_KEY || LLM_API_KEY === 'your_api_key_here') {
+        console.warn('[Image] No API key configured — skipping image generation');
+        return null;
+    }
+
+    // Only OpenAI supports image generation in this client
+    if (LLM_PROVIDER !== 'openai') {
+        console.warn('[Image] Image generation only supported with OpenAI provider');
+        return null;
+    }
+
+    const styledPrompt = IMAGE_STYLE_PREFIX + prompt;
+    console.log('[Image] Generating image for:', prompt.substring(0, 80) + '...');
+
+    try {
+        const response = await fetch(ENDPOINTS.openaiImages, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${LLM_API_KEY}`,
+            },
+            body: JSON.stringify({
+                model: 'gpt-image-1',
+                prompt: styledPrompt,
+                n: 1,
+                size: '1024x1024',
+                quality: 'low',
+            }),
+        });
+
+        if (!response.ok) {
+            const body = await response.text();
+            throw new Error(`OpenAI Image API error ${response.status}: ${body}`);
+        }
+
+        const data = await response.json();
+        const b64 = data.data[0].b64_json;
+        console.log('[Image] Image generated successfully');
+        return b64;
+    } catch (err) {
+        console.error('[Image] Image generation failed:', err.message);
+        return null;
+    }
+}
+
+module.exports = { callLLM, generateImage };

@@ -2,6 +2,8 @@
 // AGENT PIPELINE — Orchestrator
 // Runs: Input → Parser → Engine → [WorldBuilder, Showrunner] → GameMaster → Output
 // ============================================================
+const fs = require('fs');
+const path = require('path');
 const { parseInput } = require('./inputParser');
 const { describeRoom } = require('./worldBuilder');
 const { generateFlavorText, checkAchievement, evaluateBonusXp, generateItemInspection } = require('./showrunner');
@@ -9,6 +11,13 @@ const { compileFinalOutput, compileFallbackOutput } = require('./gameMaster');
 const { processAction, checkLevelUp } = require('../engine/gameEngine');
 const { getDoc } = require('../firebase');
 const playerState = require('../engine/playerState');
+const { generateImage } = require('./llmClient');
+
+// Ensure generated images directory exists
+const IMAGES_DIR = path.join(__dirname, '..', 'generated_images');
+if (!fs.existsSync(IMAGES_DIR)) {
+    fs.mkdirSync(IMAGES_DIR, { recursive: true });
+}
 
 const LLM_API_KEY = process.env.LLM_API_KEY;
 const USE_LLM = LLM_API_KEY && LLM_API_KEY !== 'your_api_key_here';
@@ -53,6 +62,7 @@ async function runPipeline(playerId, userInput) {
         let inspectionText = '';
         let achievement = null;
         let bonusXp = null;
+        let imageUrl = null;
 
         if (USE_LLM) {
             const promises = [];
@@ -89,6 +99,38 @@ async function runPipeline(playerId, userInput) {
             );
 
             await Promise.all(promises);
+
+            // --- Image Generation (runs after text agents complete) ---
+            try {
+                let imagePrompt = null;
+
+                if (hasRoomEvent && roomEvent) {
+                    // Build a scene prompt from room data
+                    const entityNames = (roomEvent.entities || []).map(e => e.name).join(', ');
+                    const itemNames = (roomEvent.items || []).map(i => i.name).join(', ');
+                    imagePrompt = `A ${roomEvent.zoneType || 'dungeon'} room: ${roomEvent.baseDescription || ''}.`;
+                    if (entityNames) imagePrompt += ` Creatures present: ${entityNames}.`;
+                    if (itemNames) imagePrompt += ` Items on the ground: ${itemNames}.`;
+                    imagePrompt += ' Post-apocalyptic dungeon crawler setting, dark and atmospheric.';
+                } else if (inspectEvent && inspectEvent.item) {
+                    // Build an item close-up prompt
+                    const item = inspectEvent.item;
+                    imagePrompt = `Close-up view of a ${item.tier || ''} ${item.type || 'item'} called "${item.name}". ${item.description || ''}. Fantasy dungeon crawler item, detailed and atmospheric.`;
+                }
+
+                if (imagePrompt) {
+                    const b64Data = await generateImage(imagePrompt);
+                    if (b64Data) {
+                        const filename = `img_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.png`;
+                        const filepath = path.join(IMAGES_DIR, filename);
+                        fs.writeFileSync(filepath, Buffer.from(b64Data, 'base64'));
+                        imageUrl = `/images/${filename}`;
+                        console.log('[Pipeline] Image saved:', imageUrl);
+                    }
+                }
+            } catch (imgErr) {
+                console.error('[Pipeline] Image generation error (non-fatal):', imgErr.message);
+            }
 
             // Save achievement to player if awarded
             if (achievement) {
@@ -131,14 +173,14 @@ async function runPipeline(playerId, userInput) {
 
             // --- 5. Agent 4: Game Master compiles final output ---
             const finalText = await compileFinalOutput(events, worldDescription, flavorText, inspectionText, achievement, updatedPlayer);
-            return { text: finalText, events, achievement, player: updatedPlayer, mapString: mapEvent?.mapString };
+            return { text: finalText, events, achievement, player: updatedPlayer, mapString: mapEvent?.mapString, imageUrl };
         } else {
             // check for map
             const mapEvent = events.find(e => e.type === 'map_display');
 
             // Fallback mode — no LLM, use template formatting
             const finalText = compileFallbackOutput(events, null, null, null, null, updatedPlayer);
-            return { text: finalText, events, achievement: null, player: updatedPlayer, mapString: mapEvent?.mapString };
+            return { text: finalText, events, achievement: null, player: updatedPlayer, mapString: mapEvent?.mapString, imageUrl: null };
         }
 
     } catch (err) {

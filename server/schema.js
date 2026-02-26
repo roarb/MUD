@@ -72,6 +72,9 @@ const typeDefs = `#graphql
   type Player {
     id: String!
     name: String!
+    gender: String
+    visuals: String
+    startingSkills: [String!]
     level: Int!
     xp: Int!
     stats: PlayerStats!
@@ -101,7 +104,7 @@ const typeDefs = `#graphql
   }
 
   type Mutation {
-    createPlayer(name: String!): Player!
+    createPlayer(name: String!, description: String): Player!
   }
 `;
 

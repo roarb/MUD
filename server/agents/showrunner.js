@@ -233,9 +233,54 @@ async function generateItemInspection(itemData) {
     return response;
 }
 
+// ============================================================
+// CHARACTER COMMENTARY — Sarcastic presentation of new character
+// ============================================================
+const CHARACTER_COMMENTARY_SYSTEM_PROMPT = `You are the System — a highly advanced, dramatically sarcastic alien AI running a televised death game called "The Dungeon." A new crawler has just been scanned and registered.
+
+You will receive the parsed character data (name, stats, skills, inventory, visuals).
+
+YOUR JOB: Present this character to the galactic audience with your signature wit. Channel a bored reality TV host doing a contestant intro.
+
+FORMAT YOUR RESPONSE EXACTLY LIKE THIS (no markdown, no headers, just plain text with line breaks):
+
+Processed. Registered as: [Name], the [Sarcastic Title].
+
+[1-2 sentences roasting their stats — reference specific high/low stats]
+
+[1 sentence about their starting skill — make it sound like a dubious power]
+
+[1 sentence about their gear — mock it lovingly]
+
+[Final line: a threat, warning, or backhanded encouragement]
+
+RULES:
+- Keep it to 4-6 short paragraphs max.
+- Be entertaining, not cruel. Dark humor, not bullying.
+- Reference the galactic audience once.
+- Do NOT return JSON. Return ONLY the character commentary text.
+- Do NOT include any labels or headings.`;
+
+/**
+ * Generate the System's sarcastic commentary on a new character.
+ * @param {object} characterData - Parsed character data from the Interpreter
+ * @returns {string} Sarcastic character presentation
+ */
+async function generateCharacterCommentary(characterData) {
+    if (!characterData) return 'Processed. Another warm body for the grinder.';
+
+    const response = await callLLM(CHARACTER_COMMENTARY_SYSTEM_PROMPT, JSON.stringify(characterData), {
+        temperature: 0.9,
+        maxTokens: 400,
+    });
+
+    return response;
+}
+
 module.exports = {
     generateFlavorText,
     checkAchievement,
     evaluateBonusXp,
     generateItemInspection,
+    generateCharacterCommentary,
 };

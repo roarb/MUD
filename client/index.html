@@ -84,14 +84,28 @@
           <p class="tagline">The System is watching. The audience is waiting. Try not to die.</p>
         </div>
 
-        <!-- Name Entry -->
+        <!-- Character Description Entry -->
         <div class="name-entry" id="name-entry">
-          <p class="system-prompt">ENTER CRAWLER DESIGNATION:</p>
-          <div class="name-input-row">
-            <span class="prompt-char">></span>
-            <input type="text" id="name-input" class="name-input" placeholder="Your name, crawler..." autocomplete="off"
-              maxlength="30">
-            <button id="name-submit" class="name-submit">ENTER</button>
+          <p class="system-prompt">SYSTEM AI: "Name and physical description for the insurance forms, meatbag. Don't lie; I can see you. Tell me who you are, what you did before the world ended, and what you're wearing."</p>
+          <div class="description-input-row">
+            <span class="prompt-char">&gt;</span>
+            <textarea id="name-input" class="description-input" placeholder="My name is... I'm a... I'm wearing..." autocomplete="off" rows="3" maxlength="500"></textarea>
+          </div>
+          <div class="description-submit-row">
+            <span class="char-count" id="char-count">0/500</span>
+            <button id="name-submit" class="name-submit">SUBMIT FOR PROCESSING</button>
+          </div>
+        </div>
+
+        <!-- Character Preview (hidden until preview response) -->
+        <div class="character-preview" id="character-preview" style="display: none;">
+          <div class="preview-commentary" id="preview-commentary"></div>
+          <div class="preview-stats" id="preview-stats"></div>
+          <div class="preview-skills" id="preview-skills"></div>
+          <div class="preview-inventory" id="preview-inventory"></div>
+          <div class="preview-actions">
+            <button id="accept-character" class="preview-btn preview-btn--accept">ACCEPT TERMS</button>
+            <button id="reroll-character" class="preview-btn preview-btn--reroll">REROLL</button>
           </div>
         </div>
       </div>

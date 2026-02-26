@@ -26,6 +26,10 @@ async function processAction(playerId, intent) {
     if (!player.statistics) {
         player.statistics = { lootboxesOpened: 0, entitiesKilled: 0 };
     }
+    // Initialize skills for legacy players
+    if (!player.skills) {
+        player.skills = rules.createStartingSkills();
+    }
 
     let result = null;
 
@@ -68,6 +72,9 @@ async function processAction(playerId, intent) {
             break;
         case 'talk':
             result = await handleTalk(player, intent);
+            break;
+        case 'flee':
+            result = await handleFlee(player);
             break;
         case 'unknown':
             result = {
@@ -163,6 +170,26 @@ async function handleMove(player, intent) {
     // Apply hazard damage (Traps)
     // 15% chance per hazard level to trigger a trap upon entry
     if (newNode.hazardLevel > 0) {
+        // --- Sense Danger skill check ---
+        const senseDangerLevel = playerState.getSkillLevel(player, 'senseDanger');
+        const dangerCheck = rules.rollSkillCheck(senseDangerLevel, player.stats.wis, 55 + newNode.hazardLevel * 10);
+
+        if (dangerCheck.success) {
+            events.push({
+                type: 'skill_check',
+                skillName: 'Sense Danger',
+                result: 'success',
+                roll: dangerCheck.roll,
+                threshold: dangerCheck.threshold,
+                detail: 'Something feels wrong about this place...',
+            });
+            // Skill level-up check
+            if (rules.checkSkillLevelUp(senseDangerLevel)) {
+                player.skills.senseDanger = (player.skills.senseDanger || 1) + 1;
+                events.push({ type: 'skill_level_up', skillName: 'Sense Danger', newLevel: player.skills.senseDanger });
+            }
+        }
+
         const trapChance = newNode.hazardLevel * 0.15;
         if (Math.random() < trapChance) {
             const hazardDmg = rules.calculateHazardDamage(newNode.hazardLevel);
@@ -183,26 +210,36 @@ async function handleMove(player, intent) {
     }
 
     // RNG Item Spawning (The "Scavenge" System)
-    // 25% chance to discover a new item upon entering a room
-    if (player.alive && Math.random() < 0.25) {
-        const allItems = await queryCollection('items');
-        if (allItems && allItems.length > 0) {
-            const spawnableItems = allItems.filter(i => !i.isCustom);
-            if (spawnableItems.length > 0) {
-                const newItemId = rules.rollRandomItemByRarity(spawnableItems);
-                if (newItemId) {
-                    if (!newNode.items) newNode.items = [];
-                    newNode.items.push(newItemId);
-                    // Commit the node update early since we modified items
-                    await setDoc('nodes', newNode.nodeId, newNode);
+    // Base 25% chance, boosted by scavenge skill (+2% per level)
+    if (player.alive) {
+        const scavengeLevel = playerState.getSkillLevel(player, 'scavenge');
+        const spawnChance = 0.25 + (scavengeLevel * 0.02);
+        if (Math.random() < spawnChance) {
+            const allItems = await queryCollection('items');
+            if (allItems && allItems.length > 0) {
+                const spawnableItems = allItems.filter(i => !i.isCustom);
+                if (spawnableItems.length > 0) {
+                    const newItemId = rules.rollRandomItemByRarity(spawnableItems);
+                    if (newItemId) {
+                        if (!newNode.items) newNode.items = [];
+                        newNode.items.push(newItemId);
+                        // Commit the node update early since we modified items
+                        await setDoc('nodes', newNode.nodeId, newNode);
 
-                    const spawnedItem = spawnableItems.find(i => i.itemId === newItemId);
-                    events.push({
-                        type: 'item_spawn',
-                        itemName: spawnedItem.name,
-                        itemType: spawnedItem.type,
-                        itemTier: spawnedItem.tier
-                    });
+                        const spawnedItem = spawnableItems.find(i => i.itemId === newItemId);
+                        events.push({
+                            type: 'item_spawn',
+                            itemName: spawnedItem.name,
+                            itemType: spawnedItem.type,
+                            itemTier: spawnedItem.tier
+                        });
+
+                        // Skill level-up check for scavenge
+                        if (rules.checkSkillLevelUp(scavengeLevel)) {
+                            player.skills.scavenge = (player.skills.scavenge || 1) + 1;
+                            events.push({ type: 'skill_level_up', skillName: 'Scavenge', newLevel: player.skills.scavenge });
+                        }
+                    }
                 }
             }
         }
@@ -564,6 +601,7 @@ async function handleStats(player) {
             hp: player.hp,
             maxHp: player.maxHp,
             stats: player.stats,
+            skills: player.skills || rules.createStartingSkills(),
             attack: playerState.getPlayerAttack(player),
             defense: playerState.getPlayerDefense(player),
             statPointsAvailable: player.statPointsAvailable || 0,
@@ -822,6 +860,95 @@ async function handleInspect(player, intent) {
         type: 'item_inspected',
         item: foundItem
     });
+
+    return { events, player };
+}
+
+// --- FLEE (skill-checked combat escape) ---
+async function handleFlee(player) {
+    const events = [];
+    const node = await getDoc('nodes', player.location);
+
+    // Check if there are hostile entities to flee from
+    const hostileEntities = [];
+    for (const eid of (node.entities || [])) {
+        const entity = await getDoc('entities', eid);
+        if (entity && entity.hp > 0 && entity.entityClass !== 'Merchant' && entity.entityClass !== 'TutorialGuide') {
+            hostileEntities.push(entity);
+        }
+    }
+
+    if (hostileEntities.length === 0) {
+        events.push({ type: 'error', message: 'Nothing to flee from. You can just walk out.' });
+        return { events, player };
+    }
+
+    // Get available exits
+    const exits = Object.entries(node.connections).filter(([, v]) => v !== null);
+    if (exits.length === 0) {
+        events.push({ type: 'error', message: 'No exits! You\'re trapped.' });
+        return { events, player };
+    }
+
+    // Roll flee skill check — base difficulty 70 (hard!)
+    const fleeLevel = playerState.getSkillLevel(player, 'flee');
+    const check = rules.rollSkillCheck(fleeLevel, player.stats.dex, 70);
+
+    events.push({
+        type: 'skill_check',
+        skillName: 'Flee',
+        result: check.success ? 'success' : 'fail',
+        roll: check.roll,
+        threshold: check.threshold,
+        detail: check.success ? 'You break free and sprint for the exit!' : 'You stumble! The enemies close in...',
+    });
+
+    if (check.success) {
+        // Skill level-up check
+        if (rules.checkSkillLevelUp(fleeLevel)) {
+            player.skills = player.skills || {};
+            player.skills.flee = (player.skills.flee || 1) + 1;
+            events.push({ type: 'skill_level_up', skillName: 'Flee', newLevel: player.skills.flee });
+        }
+
+        // Move to a random connected room
+        const [direction, targetNodeId] = exits[Math.floor(Math.random() * exits.length)];
+        const newNode = await getDoc('nodes', targetNodeId);
+
+        if (newNode) {
+            player.location = targetNodeId;
+            if (!player.explored) player.explored = [];
+            if (!player.explored.includes(targetNodeId)) {
+                player.explored.push(targetNodeId);
+            }
+
+            events.push({
+                type: 'move',
+                from: node.nodeId,
+                to: targetNodeId,
+                direction,
+                context: 'Fled in a panic!',
+            });
+
+            const lookEvents = await buildLookEvents(newNode);
+            events.push(...lookEvents);
+        }
+
+        playerState.addEvent(player, { type: 'flee', result: 'success' });
+        await playerState.savePlayer(player);
+    } else {
+        // Failed flee — take a hit from the nearest hostile
+        const attacker = hostileEntities[0];
+        const aggroResult = resolveEnemyAttack(player, attacker);
+        events.push(...aggroResult.events);
+
+        if (aggroResult.playerDead) {
+            player.alive = false;
+        }
+
+        playerState.addEvent(player, { type: 'flee', result: 'fail' });
+        await playerState.savePlayer(player);
+    }
 
     return { events, player };
 }

@@ -22,6 +22,7 @@ VALID ACTIONS AND THEIR REQUIRED FIELDS:
 - {"action": "open", "target": "<lootbox_name_or_partial>"}
 - {"action": "talk", "target": "<npc_name_or_partial>"}
 - {"action": "inspect", "target": "<item_name_or_partial>"}
+- {"action": "flee"}
 - {"action": "unknown", "text": "<the original text exactly as typed>"}
 
 RULES:

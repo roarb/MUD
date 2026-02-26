@@ -1,6 +1,6 @@
-1) ability to create images and dispaly them
+1) 2-26-26: ability to create images and dispaly them
 
-2) describe your character at the start
+2) 2-26-26: describe your character at the start
 
         Here is the system architecture for how to turn a user’s natural language description into a hard-coded character sheet.
 
@@ -64,7 +64,7 @@
 
         Dynamic Balance: You can hard-code limits so the AI can't give anyone more than 40 total stat points, ensuring no one starts as a god.
 
-3) Starting Skills:
+3) 2-26-26: Starting Skills:
         To make a Dungeon Crawler Carl style game feel reactive and high-stakes, the starting skills should represent the raw desperation of a "level zero" crawler. In a text-based MUD, these skills won't just be buttons to click—they will be the variables the AI Director uses to calculate if a player's crazy plan actually succeeds or ends in a gruesome notification.
         Here is a comprehensive list of universal starting skills, categorized by how they influence the game’s probability engine.
 

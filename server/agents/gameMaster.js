@@ -22,8 +22,10 @@ YOUR JOB: Combine all of this into a cohesive, well-formatted text block. Follow
 5. Weave in the FLAVOR TEXT naturally after the relevant event.
 6. If there's a BONUS XP award (type: bonus_xp), present the System's reason and XP amount with flair.
 7. If there's a LOOTBOX XP award (type: lootbox_xp), mention the XP gained from the loot box.
-8. If there's an ACHIEVEMENT, present it as an eye-catching notification at the end.
-9. End with a brief status line showing HP and location if combat occurred.
+8. If there's a SKILL CHECK result (type: skill_check), present it clearly — the skill name, whether it succeeded or failed, and the detail text.
+9. If there's a SKILL LEVEL UP (type: skill_level_up), present it as a notable event.
+10. If there's an ACHIEVEMENT, present it as an eye-catching notification at the end.
+11. End with a brief status line showing HP and location if combat occurred.
 
 FORMATTING RULES:
 - Use line breaks to separate sections.
@@ -178,6 +180,20 @@ function compileFallbackOutput(gameEvents, worldDescription, flavorText, inspect
                 if (event.statPointsAvailable > 0) {
                     lines.push(`★ ${event.statPointsAvailable} stat point(s) available! Use "allocate <stat>".`);
                 }
+                if (event.skills) {
+                    lines.push(``);
+                    lines.push(`=== SKILLS ===`);
+                    const skillMeta = require('../data/rules').SKILLS_LIST;
+                    const categories = { survival: [], athleticism: [], perception: [], showmanship: [] };
+                    for (const [key, level] of Object.entries(event.skills)) {
+                        const meta = skillMeta[key];
+                        if (meta) categories[meta.category].push(`${meta.label}: ${level}`);
+                    }
+                    lines.push(`Survival:    ${categories.survival.join(' | ')}`);
+                    lines.push(`Athleticism: ${categories.athleticism.join(' | ')}`);
+                    lines.push(`Perception:  ${categories.perception.join(' | ')}`);
+                    lines.push(`Showmanship: ${categories.showmanship.join(' | ')}`);
+                }
                 break;
 
             case 'stat_allocated':
@@ -199,6 +215,20 @@ function compileFallbackOutput(gameEvents, worldDescription, flavorText, inspect
 
             case 'unknown_action':
                 lines.push(`❔ You attempt to "${event.text}". The System is not impressed.`);
+                break;
+
+            case 'skill_check':
+                if (event.result === 'success') {
+                    lines.push(`🎯 [${event.skillName}] ${event.detail}`);
+                } else if (event.result === 'fail') {
+                    lines.push(`❌ [${event.skillName}] ${event.detail}`);
+                } else {
+                    lines.push(`⚙ [${event.skillName}] ${event.detail}`);
+                }
+                break;
+
+            case 'skill_level_up':
+                lines.push(`⬆ SKILL UP: ${event.skillName} → Level ${event.newLevel}!`);
                 break;
         }
     }

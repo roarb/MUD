@@ -28,6 +28,14 @@
     const achievementTitle = document.getElementById('achievement-title');
     const achievementDesc = document.getElementById('achievement-desc');
     const achievementTier = document.getElementById('achievement-tier');
+    const characterPreview = document.getElementById('character-preview');
+    const previewCommentary = document.getElementById('preview-commentary');
+    const previewStats = document.getElementById('preview-stats');
+    const previewSkills = document.getElementById('preview-skills');
+    const previewInventory = document.getElementById('preview-inventory');
+    const acceptCharBtn = document.getElementById('accept-character');
+    const rerollCharBtn = document.getElementById('reroll-character');
+    const charCount = document.getElementById('char-count');
 
     // --- State ---
     let ws = null;
@@ -36,6 +44,7 @@
     let historyIndex = -1;
     let achievementTimeout = null;
     let currentMapTopology = null;
+    let lastDescription = '';  // Store for reroll
 
     // --- WebSocket Connection ---
     function connect() {
@@ -95,9 +104,14 @@
 
             case 'game_output':
                 appendGameOutput(msg.text);
+                if (msg.imageUrl) appendImageOutput(msg.imageUrl);
                 if (msg.mapString) appendMapOutput(msg.mapString);
                 if (msg.player) updateHud(msg.player);
                 if (msg.achievement) showAchievement(msg.achievement);
+                break;
+
+            case 'character_preview':
+                showCharacterPreview(msg.characterData, msg.commentary);
                 break;
 
             case 'processing':
@@ -125,6 +139,37 @@
         div.className = 'game-msg';
         div.textContent = text;
         outputContent.appendChild(div);
+        scrollToBottom();
+    }
+
+    function appendImageOutput(imageUrl) {
+        if (!imageUrl) return;
+        const container = document.createElement('div');
+        container.className = 'game-msg game-msg--image';
+
+        const img = document.createElement('img');
+        img.src = imageUrl;
+        img.alt = 'Scene illustration';
+        img.className = 'scene-image';
+        img.loading = 'lazy';
+
+        // Show a loading placeholder until the image loads
+        const placeholder = document.createElement('div');
+        placeholder.className = 'scene-image-loading';
+        placeholder.textContent = '▓ Rendering scene... ▓';
+        container.appendChild(placeholder);
+
+        img.onload = () => {
+            placeholder.remove();
+            container.appendChild(img);
+            scrollToBottom();
+        };
+
+        img.onerror = () => {
+            placeholder.textContent = '▓ Image failed to load ▓';
+        };
+
+        outputContent.appendChild(container);
         scrollToBottom();
     }
 
@@ -308,33 +353,99 @@
         }));
     }
 
-    function submitName(name) {
+    function submitDescription(description) {
         if (!ws || ws.readyState !== WebSocket.OPEN) {
             appendErrorMessage('Not connected to server.');
             return;
         }
 
-        if (!name.trim()) {
-            name = 'Unnamed Crawler';
+        if (!description.trim()) {
+            description = 'A nameless survivor in tattered clothes.';
         }
+
+        lastDescription = description.trim();
 
         ws.send(JSON.stringify({
             type: 'create_player',
-            name: name.trim(),
+            description: description.trim(),
         }));
     }
 
+    function confirmCharacter() {
+        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+        ws.send(JSON.stringify({ type: 'confirm_character' }));
+        characterPreview.style.display = 'none';
+    }
+
+    function rerollCharacter() {
+        if (!ws || ws.readyState !== WebSocket.OPEN || !lastDescription) return;
+        characterPreview.style.display = 'none';
+        ws.send(JSON.stringify({
+            type: 'create_player',
+            description: lastDescription,
+        }));
+    }
+
+    function showCharacterPreview(characterData, commentary) {
+        // Hide description entry, show preview
+        nameEntry.style.display = 'none';
+        characterPreview.style.display = 'block';
+
+        // Render commentary
+        previewCommentary.textContent = commentary;
+
+        // Render stats
+        const statLabels = { str: 'STR', dex: 'DEX', con: 'CON', int: 'INT', wis: 'WIS', cha: 'CHA' };
+        previewStats.innerHTML = '<div class="preview-section-title">STATS</div>' +
+            Object.entries(characterData.stats).map(([key, val]) => {
+                const diff = val - 10;
+                const diffStr = diff > 0 ? `+${diff}` : diff < 0 ? `${diff}` : '±0';
+                const barWidth = ((val - 7) / 6) * 100;  // 7-13 range → 0-100%
+                const barClass = diff > 0 ? 'stat-bar--high' : diff < 0 ? 'stat-bar--low' : 'stat-bar--base';
+                return `<div class="stat-row">
+                    <span class="stat-label">${statLabels[key]}</span>
+                    <div class="stat-bar-bg"><div class="stat-bar ${barClass}" style="width:${barWidth}%"></div></div>
+                    <span class="stat-value">${val} (${diffStr})</span>
+                </div>`;
+            }).join('');
+
+        // Render skills
+        previewSkills.innerHTML = '<div class="preview-section-title">SKILLS</div>' +
+            (characterData.startingSkills || []).map(s =>
+                `<span class="skill-badge">${s}</span>`
+            ).join('');
+
+        // Render inventory
+        previewInventory.innerHTML = '<div class="preview-section-title">STARTING GEAR</div>' +
+            (characterData.startingInventory || []).map(i =>
+                `<span class="inventory-item">${i.name}</span>`
+            ).join('');
+
+        scrollToBottom();
+    }
+
     // --- Event Listeners ---
-    // Name entry
+    // Description entry
     nameSubmit.addEventListener('click', () => {
-        submitName(nameInput.value);
+        submitDescription(nameInput.value);
     });
 
     nameInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-            submitName(nameInput.value);
+        // Submit on Ctrl+Enter or Cmd+Enter (since textarea eats Enter)
+        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            submitDescription(nameInput.value);
         }
     });
+
+    // Char counter for textarea
+    nameInput.addEventListener('input', () => {
+        if (charCount) charCount.textContent = `${nameInput.value.length}/500`;
+    });
+
+    // Accept / Reroll buttons
+    acceptCharBtn.addEventListener('click', confirmCharacter);
+    rerollCharBtn.addEventListener('click', rerollCharacter);
 
     // Game input
     gameInput.addEventListener('keydown', (e) => {
