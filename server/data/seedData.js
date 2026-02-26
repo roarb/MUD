@@ -16,6 +16,7 @@
 const MAP_NODES = [
     {
         nodeId: 'entrance_plaza',
+        x: 1, y: 1,
         zoneType: 'CollapsedStreet',
         baseDescription: 'A shattered city plaza. Cracked asphalt buckles upward in frozen waves. Overturned cars form crude barricades. The sky is a sickly amber through the dust.',
         connections: { n: 'ruined_market', s: null, e: 'collapsed_alley', w: 'parking_garage', down: null },
@@ -25,6 +26,7 @@ const MAP_NODES = [
     },
     {
         nodeId: 'ruined_market',
+        x: 1, y: 2,
         zoneType: 'StorageRoom',
         baseDescription: 'A gutted convenience store. Shelves toppled like dominoes. Shattered glass everywhere. The refrigerator hums faintly despite having no power.',
         connections: { n: 'corridor_north', s: 'entrance_plaza', e: 'stairwell_east', w: null, down: null },
@@ -34,6 +36,7 @@ const MAP_NODES = [
     },
     {
         nodeId: 'collapsed_alley',
+        x: 2, y: 1,
         zoneType: 'Corridor',
         baseDescription: 'A narrow alley crushed between two leaning buildings. Rubble chokes the passage. Something skitters in the shadows above.',
         connections: { n: 'stairwell_east', s: null, e: null, w: 'entrance_plaza', down: null },
@@ -43,6 +46,7 @@ const MAP_NODES = [
     },
     {
         nodeId: 'parking_garage',
+        x: 0, y: 1,
         zoneType: 'CollapsedStreet',
         baseDescription: 'A multi-level parking garage, the upper floors pancaked down. Concrete pillars groan under impossible weight. Oil slicks rainbow the floor.',
         connections: { n: null, s: null, e: 'entrance_plaza', w: null, down: 'subway_entrance' },
@@ -52,6 +56,7 @@ const MAP_NODES = [
     },
     {
         nodeId: 'stairwell_east',
+        x: 3, y: 1,
         zoneType: 'Stairwell',
         baseDescription: 'A concrete stairwell, emergency lighting flickering red. The handrail is bent at impossible angles. Dust falls from above like snow.',
         connections: { n: 'safe_room_01', s: 'collapsed_alley', e: null, w: 'ruined_market', down: 'maintenance_tunnel' },
@@ -61,6 +66,7 @@ const MAP_NODES = [
     },
     {
         nodeId: 'corridor_north',
+        x: 2, y: 2,
         zoneType: 'Corridor',
         baseDescription: 'A long hallway of an office building. Fluorescent tubes dangle from the ceiling, sparking occasionally. Cubicle walls lie in heaps.',
         connections: { n: 'server_room', s: 'ruined_market', e: 'safe_room_01', w: 'janitor_closet', down: null },
@@ -70,6 +76,7 @@ const MAP_NODES = [
     },
     {
         nodeId: 'safe_room_01',
+        x: 3, y: 2,
         zoneType: 'SafeRoom',
         baseDescription: 'A reinforced break room. Someone barricaded it with filing cabinets. A camp stove sits cold in the corner. Relatively intact.',
         connections: { n: null, s: 'stairwell_east', e: null, w: 'corridor_north', down: null },
@@ -79,6 +86,7 @@ const MAP_NODES = [
     },
     {
         nodeId: 'server_room',
+        x: 2, y: 3,
         zoneType: 'StorageRoom',
         baseDescription: 'Rows of dead server racks. Blinking lights from a single functioning unit. The air is frigid and smells of ozone and burnt plastic.',
         connections: { n: null, s: 'corridor_north', e: null, w: null, down: null },
@@ -88,6 +96,7 @@ const MAP_NODES = [
     },
     {
         nodeId: 'janitor_closet',
+        x: 0, y: 2,
         zoneType: 'StorageRoom',
         baseDescription: 'A cramped utility closet. Mops and chemical bottles. A vent in the ceiling has been pried open from the inside.',
         connections: { n: null, s: null, e: 'corridor_north', w: null, down: null },
@@ -97,6 +106,7 @@ const MAP_NODES = [
     },
     {
         nodeId: 'subway_entrance',
+        x: 0, y: 0,
         zoneType: 'SubwayTunnel',
         baseDescription: 'The mouth of a subway station. Turnstiles bent and broken. The escalator descends into absolute darkness. Wet air exhales from below.',
         connections: { n: null, s: null, e: 'subway_platform', w: null, down: null },
@@ -106,6 +116,7 @@ const MAP_NODES = [
     },
     {
         nodeId: 'subway_platform',
+        x: 1, y: 0,
         zoneType: 'SubwayTunnel',
         baseDescription: 'An abandoned subway platform. Tile walls are cracked and weeping moisture. A derailed train car sits sideways on the tracks, gutted.',
         connections: { n: null, s: null, e: null, w: 'subway_entrance', down: null },
@@ -115,6 +126,7 @@ const MAP_NODES = [
     },
     {
         nodeId: 'maintenance_tunnel',
+        x: 3, y: 0,
         zoneType: 'SubwayTunnel',
         baseDescription: 'A narrow maintenance passage lined with pipes and conduits. Steam hisses from joints. The floor is ankle-deep in murky water.',
         connections: { n: 'subway_entrance', s: null, e: null, w: null, down: null },

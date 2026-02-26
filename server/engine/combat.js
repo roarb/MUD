@@ -65,4 +65,35 @@ function resolveCombat(player, entity) {
     return { events, entityDead: false, playerDead: false };
 }
 
-module.exports = { resolveCombat };
+/**
+ * Resolve a single attack from an entity against a player.
+ * Used for independent mob aggression.
+ */
+function resolveEnemyAttack(player, entity) {
+    const events = [];
+
+    const playerDefense = getPlayerDefense(player);
+    const entityDamage = rules.calculateDamage(entity.attack, 10, playerDefense);
+
+    player.hp = Math.max(0, player.hp - entityDamage);
+    events.push({
+        type: 'entity_attack',
+        damage: entityDamage,
+        attackerName: entity.name,
+        attackerTags: entity.actionTags,
+        playerHp: player.hp,
+        playerMaxHp: player.maxHp,
+    });
+
+    if (player.hp <= 0) {
+        events.push({
+            type: 'player_death',
+            killedBy: entity.name,
+        });
+        return { events, playerDead: true };
+    }
+
+    return { events, playerDead: false };
+}
+
+module.exports = { resolveCombat, resolveEnemyAttack };

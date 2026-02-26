@@ -16,7 +16,7 @@ B) ITEM DESCRIPTIONS: When a new or notable item is found, you may enhance its d
 RULES:
 - Keep it SHORT. 1-2 sentences max.
 - Be entertaining, not mean-spirited. Dark humor, not cruelty.
-- Reference the galactic audience occasionally ("The viewers from Andromeda are LOVING this").
+- Reference the galactic audience occasionally, randomizing their location each time (e.g., "The viewers from Andromeda", "The Sirius B crowd", "Fans in the Orion Nebula", "The Zenith broadcast").
 - Never break character. You ARE the System.
 - Don't give gameplay advice. You're a host, not a helper.
 - Return ONLY the flavor text. No labels, no JSON.`;
@@ -37,14 +37,39 @@ ACHIEVEMENT CRITERIA:
 - Taking massive damage and surviving → Achievement (bronze)
 - Dying in a stupid way → Achievement (iron)
 - Finding a rare item → Achievement (bronze)
-- Opening a loot box and getting junk → Achievement (iron) 
 - Doing something the System finds genuinely impressive → Achievement (silver/gold)
 - Creative or bizarre actions → Achievement (bronze+)
 
+REPEATING ACHIEVEMENTS (BASE-10 RULE):
+You will be provided with the crawler's "statistics" object (e.g. lootboxesOpened, entitiesKilled). 
+If giving an achievement for a repeating action (like opening a lootbox or killing an entity), you MUST strictly adhere to base-10 milestones (1, 10, 100, 1000).
+- If \`lootboxesOpened\` is 2, DO NOT award an achievement.
+- If \`lootboxesOpened\` is 10, award an achievement (bronze).
+- If \`lootboxesOpened\` is 100, award an achievement (silver or gold).
+- NEVER award incremental achievements (like 2.0, 3.0) unless the statistic exactly matches a base-10 threshold!
+
 RULES:
-- Be sarcastic and condescending in the description.
 - Titles should be punchy and memorable (e.g., "Look Out Below!", "Anger Management Issues", "Pennies From Hell").
 - Return ONLY valid JSON. No explanation.`;
+
+const INSPECT_SYSTEM_PROMPT = `You are the System — a highly advanced alien AI analyzing an item that a human crawler has just inspected. 
+
+You will receive the raw JSON data of the item.
+
+YOUR JOB: Generate a detailed inspection report. 
+Format your response exactly with these three headings (do not use markdown bolding or headers, just the text on a new line):
+[OVERVIEW]
+(1-2 sentences summarizing what the item is in your sarcastic, condescending tone)
+
+[PHYSICAL DESCRIPTION]
+(2-3 sentences describing how the item looks, feels, smells, or hums with energy)
+
+[COMMON USES]
+(1-2 sentences explaining what crawlers usually do with this, or what horrible fate awaits if used incorrectly)
+
+RULES:
+- Maintain your persona as the bored, sadistic System host.
+- Do NOT return JSON. Return only the formatted text block.`;
 
 /**
  * Generate flavor text for game events.
@@ -54,7 +79,7 @@ async function generateFlavorText(events) {
     const interesting = events.filter(e =>
         ['player_attack', 'entity_killed', 'entity_attack', 'player_death',
             'loot_dropped', 'item_pickup', 'lootbox_opened', 'hazard_damage',
-            'level_up', 'item_used', 'item_equipped'].includes(e.type)
+            'level_up', 'item_used', 'item_equipped', 'unknown_action'].includes(e.type)
     );
 
     if (interesting.length === 0) return '';
@@ -81,6 +106,7 @@ async function checkAchievement(events, player) {
     const payload = {
         events: interesting,
         playerLevel: player.level,
+        statistics: player.statistics || {},
         achievementCount: (player.achievements || []).length,
         existingAchievements: (player.achievements || []).map(a => a.title),
     };
@@ -184,4 +210,32 @@ async function evaluateBonusXp(rawInput, events, player) {
     return null;
 }
 
-module.exports = { generateFlavorText, checkAchievement, evaluateBonusXp };
+/**
+ * Generate a detailed inspection report for an item.
+ */
+async function generateItemInspection(itemData) {
+    if (!itemData) return '';
+
+    const payload = {
+        name: itemData.name,
+        type: itemData.type,
+        tier: itemData.tier,
+        stats: itemData.stats || {},
+        baseValue: itemData.baseValue || 0,
+        description: itemData.description || 'No description available.',
+    };
+
+    const response = await callLLM(INSPECT_SYSTEM_PROMPT, JSON.stringify(payload), {
+        temperature: 0.8,
+        maxTokens: 300,
+    });
+
+    return response;
+}
+
+module.exports = {
+    generateFlavorText,
+    checkAchievement,
+    evaluateBonusXp,
+    generateItemInspection,
+};

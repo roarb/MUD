@@ -17,6 +17,7 @@ const resolvers = require('./resolvers');
 const { runPipeline } = require('./agents/agentPipeline');
 const { createPlayer, loadPlayer } = require('./engine/playerState');
 const { getDoc } = require('./firebase');
+const { MAP_NODES } = require('./data/seedData');
 
 const PORT = process.env.PORT || 3000;
 
@@ -62,10 +63,20 @@ async function startServer() {
                     const player = await createPlayer(msg.name || 'Crawler');
                     playerId = player.id;
 
+                    const mapTopology = MAP_NODES.map(n => ({
+                        id: n.nodeId,
+                        name: n.baseDescription.split('.')[0] || n.nodeId,
+                        x: n.x,
+                        y: n.y,
+                        zoneType: n.zoneType,
+                        hazardLevel: n.hazardLevel,
+                    }));
+
                     ws.send(JSON.stringify({
                         type: 'player_created',
                         playerId: player.id,
                         playerName: player.name,
+                        mapTopology,
                     }));
 
                     // Send initial room description
@@ -87,10 +98,20 @@ async function startServer() {
                     }
                     playerId = player.id;
 
+                    const mapTopology = MAP_NODES.map(n => ({
+                        id: n.nodeId,
+                        name: n.baseDescription.split('.')[0] || n.nodeId,
+                        x: n.x,
+                        y: n.y,
+                        zoneType: n.zoneType,
+                        hazardLevel: n.hazardLevel,
+                    }));
+
                     ws.send(JSON.stringify({
                         type: 'player_loaded',
                         playerId: player.id,
                         playerName: player.name,
+                        mapTopology,
                     }));
 
                     // Send current room
@@ -166,6 +187,7 @@ function sanitizePlayer(player) {
         maxHp: player.maxHp,
         location: player.location,
         alive: player.alive,
+        explored: player.explored || [],
         statPointsAvailable: player.statPointsAvailable || 0,
     };
 }

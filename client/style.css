@@ -48,13 +48,16 @@
 }
 
 /* --- Reset & Base --- */
-*, *::before, *::after {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
-html, body {
+html,
+body {
   height: 100%;
   background: var(--bg-deep);
   color: var(--text-primary);
@@ -74,13 +77,11 @@ html, body {
   height: 100%;
   pointer-events: none;
   z-index: 1000;
-  background: repeating-linear-gradient(
-    0deg,
-    rgba(0, 0, 0, 0) 0px,
-    rgba(0, 0, 0, 0) 1px,
-    rgba(0, 0, 0, 0.08) 1px,
-    rgba(0, 0, 0, 0.08) 2px
-  );
+  background: repeating-linear-gradient(0deg,
+      rgba(0, 0, 0, 0) 0px,
+      rgba(0, 0, 0, 0) 1px,
+      rgba(0, 0, 0, 0.08) 1px,
+      rgba(0, 0, 0, 0.08) 2px);
 }
 
 /* --- App Container --- */
@@ -140,11 +141,21 @@ html, body {
 /* --- Player HUD --- */
 .hud {
   display: flex;
-  gap: 24px;
-  padding: 10px 20px;
-  background: var(--bg-surface);
-  border-bottom: 1px solid rgba(0, 255, 136, 0.06);
-  flex-shrink: 0;
+  flex-direction: column;
+  gap: 16px;
+  background: var(--bg-color);
+  border-bottom: 2px solid var(--primary-color);
+  padding: 16px;
+  box-shadow: 0 4px 20px rgba(0, 255, 136, 0.1);
+  position: relative;
+}
+
+.hud-stats {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .hud__item {
@@ -190,6 +201,102 @@ html, body {
   font-size: 12px;
   color: var(--text-primary);
   min-width: 60px;
+}
+
+/* =========================================================================
+   MINIMAP 
+   Circular, GTA-style map fixed in the HUD
+   ========================================================================= */
+.minimap-container {
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  border: 2px solid var(--primary-color);
+  position: absolute;
+  top: 42px;
+  right: 16px;
+  overflow: hidden;
+  background: rgba(0, 20, 10, 0.8);
+  box-shadow: 0 0 15px rgba(0, 255, 136, 0.2), inset 0 0 20px rgba(0, 255, 136, 0.1);
+  z-index: 10;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.minimap-content {
+  position: absolute;
+  /* Will be translated by JS to center the player */
+  transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.minimap-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 50%;
+  box-shadow: inset 0 0 15px rgba(0, 0, 0, 0.8);
+  pointer-events: none;
+}
+
+/* Base Node - Dark Grey (Unexplored) */
+.map-node {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  background: #333333;
+  border: 1px solid #111111;
+  /* We shift by -10px so its true center aligns with its (left, top) */
+  margin-left: -10px;
+  margin-top: -10px;
+  transition: background 0.3s;
+}
+
+/* Explored Node - Light Grey */
+.map-node--explored {
+  background: #bbbbbb;
+  border-color: #ffffff;
+}
+
+/* Safe Room - Blue */
+.map-node--safe {
+  background: #4488ff !important;
+  border-color: #88bbff !important;
+}
+
+/* Stairs Down - Yellow */
+.map-node--stairs {
+  background: #ffcc00 !important;
+  border-color: #ffffaa !important;
+}
+
+/* Current location pulse */
+.map-node--current::after {
+  content: '';
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  right: -4px;
+  bottom: -4px;
+  border: 2px solid var(--primary-color);
+  border-radius: 2px;
+  animation: pulse-border 1.5s infinite;
+}
+
+@keyframes pulse-border {
+  0% {
+    box-shadow: 0 0 0px var(--primary-color);
+  }
+
+  50% {
+    box-shadow: 0 0 8px var(--primary-color);
+  }
+
+  100% {
+    box-shadow: 0 0 0px var(--primary-color);
+  }
 }
 
 /* --- Output Area --- */
@@ -275,7 +382,8 @@ html, body {
   flex-shrink: 0;
 }
 
-.name-input, .game-input {
+.name-input,
+.game-input {
   flex: 1;
   background: var(--bg-input);
   border: 1px solid rgba(0, 255, 136, 0.15);
@@ -288,12 +396,14 @@ html, body {
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 
-.name-input:focus, .game-input:focus {
+.name-input:focus,
+.game-input:focus {
   border-color: var(--phosphor-dim);
   box-shadow: 0 0 8px var(--phosphor-glow), inset 0 0 4px var(--phosphor-glow);
 }
 
-.name-input::placeholder, .game-input::placeholder {
+.name-input::placeholder,
+.game-input::placeholder {
   color: var(--text-dim);
 }
 
@@ -343,6 +453,21 @@ html, body {
   background: rgba(255, 170, 0, 0.03);
   font-style: italic;
   color: var(--amber-dim);
+}
+
+.game-msg--map {
+  border-left-color: var(--phosphor-dim);
+  background: rgba(0, 255, 136, 0.05);
+  padding: 16px;
+  overflow-x: auto;
+}
+
+.ascii-map {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.2;
+  color: var(--phosphor-dim);
+  white-space: pre;
 }
 
 .system-msg {
@@ -401,10 +526,24 @@ html, body {
   max-width: 380px;
 }
 
-.achievement-toast.tier-iron { border-color: var(--tier-iron); }
-.achievement-toast.tier-bronze { border-color: var(--tier-bronze); box-shadow: 0 4px 24px rgba(0,0,0,0.6), 0 0 20px rgba(205, 127, 50, 0.3); }
-.achievement-toast.tier-silver { border-color: var(--tier-silver); box-shadow: 0 4px 24px rgba(0,0,0,0.6), 0 0 20px rgba(192, 192, 208, 0.3); }
-.achievement-toast.tier-gold { border-color: var(--tier-gold); box-shadow: 0 4px 24px rgba(0,0,0,0.6), 0 0 24px rgba(255, 215, 0, 0.4); }
+.achievement-toast.tier-iron {
+  border-color: var(--tier-iron);
+}
+
+.achievement-toast.tier-bronze {
+  border-color: var(--tier-bronze);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.6), 0 0 20px rgba(205, 127, 50, 0.3);
+}
+
+.achievement-toast.tier-silver {
+  border-color: var(--tier-silver);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.6), 0 0 20px rgba(192, 192, 208, 0.3);
+}
+
+.achievement-toast.tier-gold {
+  border-color: var(--tier-gold);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.6), 0 0 24px rgba(255, 215, 0, 0.4);
+}
 
 .achievement-toast__icon {
   font-size: 32px;
@@ -440,49 +579,121 @@ html, body {
   margin-top: 6px;
 }
 
-.achievement-toast__tier.iron { color: var(--tier-iron); }
-.achievement-toast__tier.bronze { color: var(--tier-bronze); }
-.achievement-toast__tier.silver { color: var(--tier-silver); }
-.achievement-toast__tier.gold { color: var(--tier-gold); }
+.achievement-toast__tier.iron {
+  color: var(--tier-iron);
+}
+
+.achievement-toast__tier.bronze {
+  color: var(--tier-bronze);
+}
+
+.achievement-toast__tier.silver {
+  color: var(--tier-silver);
+}
+
+.achievement-toast__tier.gold {
+  color: var(--tier-gold);
+}
 
 /* --- Animations --- */
 @keyframes pulse-glow {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.6;
+  }
 }
 
 @keyframes flicker {
-  0%, 100% { opacity: 1; }
-  92% { opacity: 1; }
-  93% { opacity: 0.7; }
-  94% { opacity: 1; }
-  96% { opacity: 0.8; }
-  97% { opacity: 1; }
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  92% {
+    opacity: 1;
+  }
+
+  93% {
+    opacity: 0.7;
+  }
+
+  94% {
+    opacity: 1;
+  }
+
+  96% {
+    opacity: 0.8;
+  }
+
+  97% {
+    opacity: 1;
+  }
 }
 
 @keyframes bar-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.5;
+  }
 }
 
 @keyframes msg-fade-in {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes toast-slide-in {
-  from { opacity: 0; transform: translateX(80px); }
-  to { opacity: 1; transform: translateX(0); }
+  from {
+    opacity: 0;
+    transform: translateX(80px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 @keyframes toast-slide-out {
-  from { opacity: 1; transform: translateX(0); }
-  to { opacity: 0; transform: translateX(80px); }
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateX(80px);
+  }
 }
 
 @keyframes dots-pulse {
-  0%, 100% { opacity: 0.3; }
-  50% { opacity: 1; }
+
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+
+  50% {
+    opacity: 1;
+  }
 }
 
 /* --- Responsive --- */

@@ -1,15 +1,19 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Dungeon Crawler MUD — A text-based dungeon crawler powered by AI agents">
-  <title>Dungeon Crawler MUD — The System Awaits</title>
+  <title>MULTI-USER DUNGEON [ M.U.D. ] — The System Awaits</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
+  <link
+    href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Orbitron:wght@500;700;900&display=swap"
+    rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
   <div class="scanline-overlay"></div>
 
@@ -18,7 +22,7 @@
     <header class="title-bar">
       <div class="title-bar__left">
         <span class="title-bar__logo">⬡</span>
-        <h1 class="title-bar__text">DUNGEON CRAWLER MUD</h1>
+        <h1 class="title-bar__text">MULTI-USER DUNGEON [ M.U.D. ]</h1>
       </div>
       <div class="title-bar__right">
         <span class="title-bar__status" id="connection-status">● DISCONNECTED</span>
@@ -27,24 +31,35 @@
 
     <!-- Player HUD -->
     <div class="hud" id="player-hud" style="display: none;">
-      <div class="hud__item">
-        <span class="hud__label">HP</span>
-        <div class="hud__bar-container">
-          <div class="hud__bar hud__bar--hp" id="hp-bar" style="width: 100%"></div>
+      <!-- Minimap container -->
+      <div class="minimap-container" id="minimap">
+        <div class="minimap-content" id="minimap-content"></div>
+        <div class="minimap-overlay"></div>
+      </div>
+      <div class="hud-stats">
+        <div class="hud__item">
+          <span class="hud__label">NME</span>
+          <span class="hud__value hud__value--name" id="name-value">--</span>
         </div>
-        <span class="hud__value" id="hp-value">--/--</span>
-      </div>
-      <div class="hud__item">
-        <span class="hud__label">LVL</span>
-        <span class="hud__value" id="level-value">--</span>
-      </div>
-      <div class="hud__item">
-        <span class="hud__label">XP</span>
-        <span class="hud__value" id="xp-value">--</span>
-      </div>
-      <div class="hud__item">
-        <span class="hud__label">LOC</span>
-        <span class="hud__value" id="location-value">--</span>
+        <div class="hud__item">
+          <span class="hud__label">HP</span>
+          <div class="hud__bar-container">
+            <div class="hud__bar hud__bar--hp" id="hp-bar" style="width: 100%"></div>
+          </div>
+          <span class="hud__value" id="hp-value">--/--</span>
+        </div>
+        <div class="hud__item">
+          <span class="hud__label">LVL</span>
+          <span class="hud__value" id="level-value">--</span>
+        </div>
+        <div class="hud__item">
+          <span class="hud__label">XP</span>
+          <span class="hud__value" id="xp-value">--</span>
+        </div>
+        <div class="hud__item">
+          <span class="hud__label">LOC</span>
+          <span class="hud__value" id="location-value">--</span>
+        </div>
       </div>
     </div>
 
@@ -74,7 +89,8 @@
           <p class="system-prompt">ENTER CRAWLER DESIGNATION:</p>
           <div class="name-input-row">
             <span class="prompt-char">></span>
-            <input type="text" id="name-input" class="name-input" placeholder="Your name, crawler..." autocomplete="off" maxlength="30">
+            <input type="text" id="name-input" class="name-input" placeholder="Your name, crawler..." autocomplete="off"
+              maxlength="30">
             <button id="name-submit" class="name-submit">ENTER</button>
           </div>
         </div>
@@ -85,7 +101,8 @@
     <footer class="input-area" id="input-area" style="display: none;">
       <div class="input-row">
         <span class="prompt-char" id="prompt-char">></span>
-        <input type="text" id="game-input" class="game-input" placeholder="What do you do?" autocomplete="off" autofocus>
+        <input type="text" id="game-input" class="game-input" placeholder="What do you do?" autocomplete="off"
+          autofocus>
       </div>
       <div class="processing-indicator" id="processing-indicator" style="display: none;">
         <span class="processing-dots">■ ■ ■</span>
@@ -107,4 +124,5 @@
 
   <script src="app.js"></script>
 </body>
+
 </html>

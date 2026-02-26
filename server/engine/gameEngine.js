@@ -3,7 +3,7 @@
 // All methods are async (Firestore reads/writes)
 // ============================================================
 const { getDoc, setDoc, updateDoc: updateFirestoreDoc, queryCollection } = require('../firebase');
-const { resolveCombat } = require('./combat');
+const { resolveCombat, resolveEnemyAttack } = require('./combat');
 const playerState = require('./playerState');
 const rules = require('../data/rules');
 
@@ -22,35 +22,107 @@ async function processAction(playerId, intent) {
         return { events: [{ type: 'error', message: 'You are dead. Your journey has ended.' }], player };
     }
 
+    // Initialize missing statistics for legacy players
+    if (!player.statistics) {
+        player.statistics = { lootboxesOpened: 0, entitiesKilled: 0 };
+    }
+
+    let result = null;
+
     switch (intent.action) {
         case 'move':
-            return await handleMove(player, intent);
+            result = await handleMove(player, intent);
+            break;
         case 'look':
-            return await handleLook(player);
+            result = await handleLook(player);
+            break;
         case 'attack':
-            return await handleAttack(player, intent);
+            result = await handleAttack(player, intent);
+            break;
         case 'pickup':
-            return await handlePickup(player, intent);
+            result = await handlePickup(player, intent);
+            break;
         case 'use':
-            return await handleUse(player, intent);
+            result = await handleUse(player, intent);
+            break;
         case 'equip':
-            return await handleEquip(player, intent);
+            result = await handleEquip(player, intent);
+            break;
         case 'inventory':
-            return await handleInventory(player);
+            result = await handleInventory(player);
+            break;
         case 'stats':
-            return await handleStats(player);
+            result = await handleStats(player);
+            break;
+        case 'map':
+            result = await handleMap(player);
+            break;
         case 'allocate':
-            return await handleAllocateStat(player, intent);
+            result = await handleAllocateStat(player, intent);
+            break;
         case 'open':
-            return await handleOpenLootbox(player, intent);
+            result = await handleOpenLootbox(player, intent);
+            break;
+        case 'inspect':
+            result = await handleInspect(player, intent);
+            break;
         case 'talk':
-            return await handleTalk(player, intent);
-        default:
-            return {
-                events: [{ type: 'error', message: `Unknown action: "${intent.action}". Try: move, look, attack, pickup, use, equip, inventory, stats, talk.` }],
+            result = await handleTalk(player, intent);
+            break;
+        case 'unknown':
+            result = {
+                events: [{ type: 'unknown_action', text: intent.text }],
                 player,
             };
+            break;
+        default:
+            result = {
+                events: [{ type: 'error', message: `Unknown action: "${intent.action}". Try: move, look, attack, pickup, use, equip, inventory, stats, map, talk.` }],
+                player,
+            };
+            break;
     }
+
+    // == MOB AGGRO TICK ==
+    // If the player is still alive, let hostile entities in the same room attack them.
+    if (result.player && result.player.alive && intent.action !== 'move') {
+        const currentNode = await getDoc('nodes', result.player.location);
+        if (currentNode && currentNode.entities && currentNode.entities.length > 0) {
+
+            // Check if player attacked a specific target this turn, they shouldn't attack twice
+            const combatEvent = result.events.find(e => e.type === 'player_attack');
+            const targetedEntityId = combatEvent ? combatEvent.targetId : null;
+
+            let playerWasAttacked = false;
+
+            for (const entityId of currentNode.entities) {
+                // Don't process the entity the player just attacked (combat.js already handled retaliation)
+                if (entityId === targetedEntityId) continue;
+
+                const entity = await getDoc('entities', entityId);
+                if (!entity || entity.hp <= 0) continue;
+
+                // Only aggressive entities attack. Hardcode merchants/guides to ignore player.
+                if (entity.entityClass === 'Merchant' || entity.entityClass === 'TutorialGuide') continue;
+
+                // Entity attacks the player
+                const aggroResult = resolveEnemyAttack(result.player, entity);
+                result.events.push(...aggroResult.events);
+                playerWasAttacked = true;
+
+                if (aggroResult.playerDead) {
+                    result.player.alive = false;
+                    break; // Stop processing further attacks if dead
+                }
+            }
+
+            if (playerWasAttacked) {
+                await playerState.savePlayer(result.player);
+            }
+        }
+    }
+
+    return result;
 }
 
 // --- MOVEMENT ---
@@ -83,22 +155,56 @@ async function handleMove(player, intent) {
 
     // Update player location
     player.location = newNodeId;
+    if (!player.explored) player.explored = [currentNode.nodeId];
+    if (!player.explored.includes(newNodeId)) {
+        player.explored.push(newNodeId);
+    }
 
-    // Apply hazard damage
-    const hazardDmg = rules.calculateHazardDamage(newNode.hazardLevel);
-    if (hazardDmg > 0) {
-        player.hp = Math.max(0, player.hp - hazardDmg);
-        events.push({
-            type: 'hazard_damage',
-            damage: hazardDmg,
-            hazardLevel: newNode.hazardLevel,
-            playerHp: player.hp,
-            playerMaxHp: player.maxHp,
-        });
+    // Apply hazard damage (Traps)
+    // 15% chance per hazard level to trigger a trap upon entry
+    if (newNode.hazardLevel > 0) {
+        const trapChance = newNode.hazardLevel * 0.15;
+        if (Math.random() < trapChance) {
+            const hazardDmg = rules.calculateHazardDamage(newNode.hazardLevel);
+            player.hp = Math.max(0, player.hp - hazardDmg);
+            events.push({
+                type: 'hazard_damage',
+                damage: hazardDmg,
+                hazardLevel: newNode.hazardLevel,
+                playerHp: player.hp,
+                playerMaxHp: player.maxHp,
+            });
 
-        if (player.hp <= 0) {
-            player.alive = false;
-            events.push({ type: 'player_death', killedBy: 'environmental hazard' });
+            if (player.hp <= 0) {
+                player.alive = false;
+                events.push({ type: 'player_death', killedBy: 'a hidden trap' });
+            }
+        }
+    }
+
+    // RNG Item Spawning (The "Scavenge" System)
+    // 25% chance to discover a new item upon entering a room
+    if (player.alive && Math.random() < 0.25) {
+        const allItems = await queryCollection('items');
+        if (allItems && allItems.length > 0) {
+            const spawnableItems = allItems.filter(i => !i.isCustom);
+            if (spawnableItems.length > 0) {
+                const newItemId = rules.rollRandomItemByRarity(spawnableItems);
+                if (newItemId) {
+                    if (!newNode.items) newNode.items = [];
+                    newNode.items.push(newItemId);
+                    // Commit the node update early since we modified items
+                    await setDoc('nodes', newNode.nodeId, newNode);
+
+                    const spawnedItem = spawnableItems.find(i => i.itemId === newItemId);
+                    events.push({
+                        type: 'item_spawn',
+                        itemName: spawnedItem.name,
+                        itemType: spawnedItem.type,
+                        itemTier: spawnedItem.tier
+                    });
+                }
+            }
         }
     }
 
@@ -214,6 +320,7 @@ async function handleAttack(player, intent) {
 
     // If entity died, award XP and roll loot
     if (result.entityDead) {
+        player.statistics.entitiesKilled = (player.statistics.entitiesKilled || 0) + 1;
         const xpGained = entity.xpReward || 0;
         player.xp += xpGained;
         events.push({ type: 'xp_gained', amount: xpGained, totalXp: player.xp });
@@ -251,6 +358,9 @@ async function handleAttack(player, intent) {
 
         // Persist entity death
         await setDoc('entities', entity.entityId, entity);
+    } else {
+        // Persist entity health reduction when they survive an attack
+        await setDoc('entities', entity.entityId, entity);
     }
 
     if (result.playerDead) {
@@ -283,11 +393,16 @@ async function handlePickup(player, intent) {
             foundIndex = i;
             break;
         }
-        // Partial name match
+        // Partial name or ID match
         const item = await getDoc('items', node.items[i]);
-        if (item && item.name.toLowerCase().includes((targetItemId || '').toLowerCase())) {
-            foundIndex = i;
-            break;
+        if (item) {
+            const searchStr = (targetItemId || '').toLowerCase().replace(/[\s_]/g, '');
+            const objName = item.name.toLowerCase().replace(/[\s_]/g, '');
+            const objId = item.itemId.toLowerCase().replace(/[\s_]/g, '');
+            if (objName.includes(searchStr) || objId.includes(searchStr)) {
+                foundIndex = i;
+                break;
+            }
         }
     }
 
@@ -324,11 +439,12 @@ async function handleUse(player, intent) {
     const events = [];
     const targetItemId = intent.target;
 
-    // Find in inventory
-    const idx = player.inventory.findIndex(i =>
-        i.itemId === targetItemId ||
-        i.name.toLowerCase().includes((targetItemId || '').toLowerCase())
-    );
+    const searchStr = (targetItemId || '').toLowerCase().replace(/[\s_]/g, '');
+    const idx = player.inventory.findIndex(i => {
+        const objName = i.name.toLowerCase().replace(/[\s_]/g, '');
+        const objId = i.itemId.toLowerCase().replace(/[\s_]/g, '');
+        return objName.includes(searchStr) || objId.includes(searchStr);
+    });
 
     if (idx === -1) {
         events.push({ type: 'error', message: `You don't have "${targetItemId}" in your inventory.` });
@@ -369,10 +485,12 @@ async function handleEquip(player, intent) {
     const events = [];
     const targetItemId = intent.target;
 
-    const idx = player.inventory.findIndex(i =>
-        i.itemId === targetItemId ||
-        i.name.toLowerCase().includes((targetItemId || '').toLowerCase())
-    );
+    const searchStr = (targetItemId || '').toLowerCase().replace(/[\s_]/g, '');
+    const idx = player.inventory.findIndex(i => {
+        const objName = i.name.toLowerCase().replace(/[\s_]/g, '');
+        const objId = i.itemId.toLowerCase().replace(/[\s_]/g, '');
+        return objName.includes(searchStr) || objId.includes(searchStr);
+    });
 
     if (idx === -1) {
         events.push({ type: 'error', message: `You don't have "${targetItemId}" in your inventory.` });
@@ -454,6 +572,77 @@ async function handleStats(player) {
     };
 }
 
+// --- MAP ---
+async function handleMap(player) {
+    if (!player.explored) {
+        player.explored = [player.location];
+        await playerState.savePlayer(player);
+    }
+    const explored = player.explored;
+
+    // Helper to format a room name or hide it if unexplored
+    const getRoomName = (nodeId) => {
+        if (!nodeId) return '      ';
+        if (nodeId === player.location) return '[*YOU*]';
+        if (explored.includes(nodeId)) {
+            // Abbreviate known room names to fit in a small box
+            let name = nodeId.replace(/_/g, ' ');
+            if (name.length > 7) name = name.substring(0, 7);
+            return `[${name.padEnd(7)}]`;
+        }
+        return ' [???] ';
+    };
+
+    // Very simple localized ASCII rendering of the known layout.
+    // We'll hardcode the grid layout based on seedData for now as a minimap.
+
+    // Y coords: Higher is North
+    // X coords: Higher is East
+    // Grid structure from seedData:
+    // (0, 3)                         [Server]
+    //                                   |
+    // (0, 2)     [Janitor] - [Ruined Mkt] - [Corridor N] - [Safe Room]
+    //                                   |                      |
+    // (0, 1) [Parking] - [Entrance Plaza] - [Coll Al] - [Stairwell E]
+    //            |                                              |
+    // (0, 0) [Subway Ent] - [Subway Plat]              [Maint Tunnel]
+
+    // We'll just build an ASCII string for it that reveals explored nodes.
+    const mapRows = [
+        "       " + getRoomName('server_room'),
+        "          | ",
+        getRoomName('janitor_closet') + "-" + getRoomName('corridor_north') + "-" + getRoomName('safe_room_01'),
+        "          |        | ",
+        getRoomName('parking_garage') + "-" + getRoomName('entrance_plaza') + "-" + getRoomName('collapsed_alley') + "-" + getRoomName('stairwell_east'),
+        "   |                       | ",
+        getRoomName('subway_entrance') + "-" + getRoomName('subway_platform') + "       " + getRoomName('maintenance_tunnel')
+    ];
+
+    // Note: The grid isn't a perfect 2D map based on the seed data connections since 
+    // it's a graph that doesn't strictly align, but this represents the basic topological layout.
+    // For example ruined_market is North of entrance_plaza, and corridor_north is north of ruined_market.
+
+    const trueMapRows = [
+        "            " + getRoomName('server_room'),
+        "               | ",
+        getRoomName('janitor_closet') + " - " + getRoomName('corridor_north') + " - " + getRoomName('safe_room_01'),
+        "               |              | ",
+        "            " + getRoomName('ruined_market') + " - - - - - +",
+        "               |              | ",
+        getRoomName('parking_garage') + " - " + getRoomName('entrance_plaza') + " - " + getRoomName('collapsed_alley') + " -" + getRoomName('stairwell_east'),
+        "   |                                  | ",
+        getRoomName('subway_entrance') + " - " + getRoomName('subway_platform') + "          " + getRoomName('maintenance_tunnel')
+    ];
+
+    return {
+        events: [{
+            type: 'map_display',
+            mapString: '\n' + trueMapRows.join('\n'),
+        }],
+        player,
+    };
+}
+
 // --- ALLOCATE STAT ---
 async function handleAllocateStat(player, intent) {
     const events = [];
@@ -488,10 +677,13 @@ async function handleOpenLootbox(player, intent) {
     const events = [];
     const targetItemId = intent.target;
 
-    const idx = player.inventory.findIndex(i =>
-        (i.itemId === targetItemId || i.name.toLowerCase().includes((targetItemId || '').toLowerCase()))
-        && i.type === 'lootbox'
-    );
+    const searchStr = (targetItemId || '').toLowerCase().replace(/[\s_]/g, '');
+    const idx = player.inventory.findIndex(i => {
+        if (i.type !== 'lootbox') return false;
+        const objName = i.name.toLowerCase().replace(/[\s_]/g, '');
+        const objId = i.itemId.toLowerCase().replace(/[\s_]/g, '');
+        return objName.includes(searchStr) || objId.includes(searchStr);
+    });
 
     if (idx === -1) {
         events.push({ type: 'error', message: `No loot box "${targetItemId}" in inventory.` });
@@ -527,6 +719,7 @@ async function handleOpenLootbox(player, intent) {
     }
 
     // Award XP for opening the loot box
+    player.statistics.lootboxesOpened = (player.statistics.lootboxesOpened || 0) + 1;
     const lootboxXp = rules.lootboxXpReward(box.tier);
     player.xp += lootboxXp;
     events.push({ type: 'lootbox_xp', amount: lootboxXp, tier: box.tier, totalXp: player.xp });
@@ -565,7 +758,7 @@ async function handleTalk(player, intent) {
         events.push({
             type: 'talk',
             entityName: targetEntity.name,
-            message: `${targetEntity.name} stares at you blankly. It doesn't seem interested in conversation.`,
+            message: `${targetEntity.name} stares at you blankly.It doesn't seem interested in conversation.`,
         });
     } else {
         const line = targetEntity.dialogue[Math.floor(Math.random() * targetEntity.dialogue.length)];
@@ -577,6 +770,58 @@ async function handleTalk(player, intent) {
             actionTags: targetEntity.actionTags,
         });
     }
+
+    return { events, player };
+}
+
+// --- INSPECT ---
+async function handleInspect(player, intent) {
+    const events = [];
+    const targetId = intent.target;
+
+    if (!targetId) {
+        events.push({ type: 'error', message: 'Inspect what?' });
+        return { events, player };
+    }
+
+    const searchStr = targetId.toLowerCase().replace(/[\s_]/g, '');
+    let foundItem = null;
+
+    // 1. Check inventory
+    const inventoryItem = player.inventory.find(i => {
+        const objName = i.name.toLowerCase().replace(/[\s_]/g, '');
+        const objId = i.itemId.toLowerCase().replace(/[\s_]/g, '');
+        return objName.includes(searchStr) || objId.includes(searchStr);
+    });
+
+    if (inventoryItem) {
+        foundItem = inventoryItem;
+    } else {
+        // 2. Check room
+        const node = await getDoc('nodes', player.location);
+        for (const itemId of (node.items || [])) {
+            const roomItem = await getDoc('items', itemId);
+            if (roomItem) {
+                const objName = roomItem.name.toLowerCase().replace(/[\s_]/g, '');
+                const objId = roomItem.itemId.toLowerCase().replace(/[\s_]/g, '');
+                if (objName.includes(searchStr) || objId.includes(searchStr)) {
+                    foundItem = roomItem;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (!foundItem) {
+        events.push({ type: 'error', message: `No item matching "${targetId}" found in inventory or room.` });
+        return { events, player };
+    }
+
+    // Fire the inspection event
+    events.push({
+        type: 'item_inspected',
+        item: foundItem
+    });
 
     return { events, player };
 }

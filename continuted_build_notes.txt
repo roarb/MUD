@@ -1,0 +1,9 @@
+ability to create images and dispaly them
+
+describe your character at the start
+
+resume a crawl?
+
+conversation with npc's doesn't' really work - give them all some agency? a pool of NPC's with name's and backstories
+
+if there's not an action from the user for 2 seconds, populate buttons that show relavent actions to the current situation

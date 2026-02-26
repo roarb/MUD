@@ -80,6 +80,24 @@ function rollLoot(lootTable) {
     return entries[entries.length - 1].itemId; // fallback
 }
 
+// --- RNG item spawning by rarity ---
+function rollRandomItemByRarity(items) {
+    if (!items || items.length === 0) return null;
+
+    // Total weight is the sum of all item rarities
+    const totalRarity = items.reduce((sum, item) => sum + (item.rarity || 0.1), 0);
+    let roll = Math.random() * totalRarity;
+
+    for (const item of items) {
+        roll -= (item.rarity || 0.1);
+        if (roll <= 0) {
+            return item.itemId;
+        }
+    }
+
+    return items[items.length - 1].itemId; // fallback
+}
+
 // --- Loot box XP rewards by tier ---
 const LOOTBOX_XP = { iron: 10, bronze: 25, silver: 50, gold: 100 };
 
@@ -102,5 +120,6 @@ module.exports = {
     createStartingStats,
     allocateStatPoint,
     rollLoot,
+    rollRandomItemByRarity,
     lootboxXpReward,
 };

@@ -33,6 +33,11 @@ async function createPlayer(name) {
         achievements: [],    // Earned achievements
         statPointsAvailable: 0,
         alive: true,
+        explored: [STARTING_NODE], // Track visited locations
+        statistics: {              // Track continuous metrics
+            lootboxesOpened: 0,
+            entitiesKilled: 0,
+        },
     };
 
     await setDoc(PLAYERS_COLLECTION, player.id, player);

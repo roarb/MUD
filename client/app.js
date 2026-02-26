@@ -17,6 +17,7 @@
     const promptChar = document.getElementById('prompt-char');
     const connectionStatus = document.getElementById('connection-status');
     const playerHud = document.getElementById('player-hud');
+    const nameValue = document.getElementById('name-value');
     const hpBar = document.getElementById('hp-bar');
     const hpValue = document.getElementById('hp-value');
     const levelValue = document.getElementById('level-value');
@@ -34,6 +35,7 @@
     let commandHistory = [];
     let historyIndex = -1;
     let achievementTimeout = null;
+    let currentMapTopology = null;
 
     // --- WebSocket Connection ---
     function connect() {
@@ -70,25 +72,30 @@
         switch (msg.type) {
             case 'player_created':
                 playerId = msg.playerId;
+                currentMapTopology = msg.mapTopology;
                 localStorage.setItem('playerId', playerId);
                 nameEntry.style.display = 'none';
                 inputArea.style.display = 'block';
                 playerHud.style.display = 'flex';
+                document.getElementById('minimap').style.display = 'flex';
                 appendSystemMessage(`Crawler "${msg.playerName}" registered. ID: ${msg.playerId.slice(0, 8)}...`);
                 gameInput.focus();
                 break;
 
             case 'player_loaded':
                 playerId = msg.playerId;
+                currentMapTopology = msg.mapTopology;
                 nameEntry.style.display = 'none';
                 inputArea.style.display = 'block';
                 playerHud.style.display = 'flex';
+                document.getElementById('minimap').style.display = 'flex';
                 appendSystemMessage(`Welcome back, ${msg.playerName}.`);
                 gameInput.focus();
                 break;
 
             case 'game_output':
                 appendGameOutput(msg.text);
+                if (msg.mapString) appendMapOutput(msg.mapString);
                 if (msg.player) updateHud(msg.player);
                 if (msg.achievement) showAchievement(msg.achievement);
                 break;
@@ -113,9 +120,22 @@
 
     // --- Output Functions ---
     function appendGameOutput(text) {
+        if (!text) return; // Ignore empty strings like we might send for map-only output
         const div = document.createElement('div');
         div.className = 'game-msg';
         div.textContent = text;
+        outputContent.appendChild(div);
+        scrollToBottom();
+    }
+
+    function appendMapOutput(mapString) {
+        const div = document.createElement('div');
+        div.className = 'game-msg game-msg--map';
+        // Use a pre tag to preserve ASCII formatting
+        const pre = document.createElement('pre');
+        pre.className = 'ascii-map';
+        pre.textContent = mapString;
+        div.appendChild(pre);
         outputContent.appendChild(div);
         scrollToBottom();
     }
@@ -154,6 +174,8 @@
     function updateHud(player) {
         if (!player) return;
 
+        if (nameValue) nameValue.textContent = player.name;
+
         const hpPercent = Math.max(0, (player.hp / player.maxHp) * 100);
         hpBar.style.width = `${hpPercent}%`;
         hpValue.textContent = `${player.hp}/${player.maxHp}`;
@@ -176,6 +198,60 @@
             appendSystemMessage('You have died. Refresh to start a new game.');
             gameInput.disabled = true;
         }
+
+        renderMinimap(player);
+    }
+
+    function renderMinimap(player) {
+        if (!currentMapTopology) return;
+
+        const minimapContent = document.getElementById('minimap-content');
+        if (!minimapContent) return;
+
+        const currentNode = currentMapTopology.find(n => n.id === player.location);
+        if (!currentNode) return;
+
+        const SPACING = 30;
+
+        currentMapTopology.forEach(node => {
+            let div = document.getElementById(`map-node-${node.id}`);
+            if (!div) {
+                div = document.createElement('div');
+                div.id = `map-node-${node.id}`;
+                div.className = 'map-node';
+
+                const pixelX = node.x * SPACING;
+                const pixelY = -(node.y * SPACING);
+
+                div.style.left = `calc(50% + ${pixelX}px)`;
+                div.style.top = `calc(50% + ${pixelY}px)`;
+                minimapContent.appendChild(div);
+            }
+
+            // Reset class each frame
+            div.className = 'map-node';
+
+            const isExplored = player.explored && player.explored.includes(node.id);
+            const isCurrent = (node.id === player.location);
+
+            if (isExplored) {
+                div.classList.add('map-node--explored');
+                if (node.zoneType.includes('SafeRoom')) div.classList.add('map-node--safe');
+                if (node.zoneType === 'Stairwell' || node.zoneType === 'SubwayTunnel') div.classList.add('map-node--stairs');
+                div.title = node.name;
+            } else {
+                div.title = '???';
+            }
+
+            if (isCurrent) {
+                div.classList.add('map-node--current');
+            }
+        });
+
+        // Pan map smoothy to center on the player
+        const offsetX = -currentNode.x * SPACING;
+        const offsetY = currentNode.y * SPACING;
+        minimapContent.style.transform = `translate(${offsetX}px, ${offsetY}px)`;
     }
 
     function formatLocation(loc) {

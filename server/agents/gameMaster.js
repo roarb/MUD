@@ -10,17 +10,20 @@ You will receive:
 1. GAME EVENTS: Structured data about what happened (damage numbers, HP changes, items found, etc.)
 2. WORLD DESCRIPTION: An atmospheric description of the room (from the World Builder)
 3. FLAVOR TEXT: Optional sarcastic commentary from the System AI
-4. ACHIEVEMENT: Optional achievement notification
+4. ITEM INSPECTION: Dedicated AI breakdown of an inspected item (Overview, Physical Description, Common Uses)
+5. ACHIEVEMENT: Optional achievement notification
 
 YOUR JOB: Combine all of this into a cohesive, well-formatted text block. Follow this structure:
 
 1. Start with the WORLD DESCRIPTION if a new room is being shown.
 2. Present GAME EVENTS clearly — damage dealt, damage taken, XP gained, items found. Use specific numbers.
-3. Weave in the FLAVOR TEXT naturally after the relevant event.
-4. If there's a BONUS XP award (type: bonus_xp), present the System's reason and XP amount with flair.
-5. If there's a LOOTBOX XP award (type: lootbox_xp), mention the XP gained from the loot box.
-6. If there's an ACHIEVEMENT, present it as an eye-catching notification at the end.
-7. End with a brief status line showing HP and location if combat occurred.
+3. If the user performed an UNKNOWN ACTION, briefly mention they attempted to do something incomprehensible.
+4. If there is an ITEM INSPECTION, present it prominently and accurately based on the provided text.
+5. Weave in the FLAVOR TEXT naturally after the relevant event.
+6. If there's a BONUS XP award (type: bonus_xp), present the System's reason and XP amount with flair.
+7. If there's a LOOTBOX XP award (type: lootbox_xp), mention the XP gained from the loot box.
+8. If there's an ACHIEVEMENT, present it as an eye-catching notification at the end.
+9. End with a brief status line showing HP and location if combat occurred.
 
 FORMATTING RULES:
 - Use line breaks to separate sections.
@@ -32,11 +35,12 @@ FORMATTING RULES:
 /**
  * Compile all agent outputs into the final player-facing text.
  */
-async function compileFinalOutput(gameEvents, worldDescription, flavorText, achievement, player) {
+async function compileFinalOutput(gameEvents, worldDescription, flavorText, inspectionText, achievement, player) {
     const payload = {
         gameEvents,
         worldDescription: worldDescription || null,
         flavorText: flavorText || null,
+        inspectionText: inspectionText || null,
         achievement: achievement || null,
         playerStatus: {
             hp: player.hp,
@@ -59,7 +63,7 @@ async function compileFinalOutput(gameEvents, worldDescription, flavorText, achi
  * Fallback compiler when LLM is not available.
  * Formats game events directly into readable text.
  */
-function compileFallbackOutput(gameEvents, worldDescription, flavorText, achievement, player) {
+function compileFallbackOutput(gameEvents, worldDescription, flavorText, inspectionText, achievement, player) {
     const lines = [];
 
     for (const event of gameEvents) {
@@ -79,6 +83,14 @@ function compileFallbackOutput(gameEvents, worldDescription, flavorText, achieve
                 lines.push(`Exits: ${event.exits.join(', ')}`);
                 break;
 
+            case 'item_inspected':
+                if (inspectionText) {
+                    lines.push(inspectionText);
+                } else {
+                    lines.push(`You inspect ${event.item.name} (${event.item.tier} ${event.item.type}). ${event.item.description}`);
+                }
+                break;
+
             case 'move':
                 lines.push(`You move ${event.direction.toUpperCase()} to ${event.to}.`);
                 break;
@@ -92,7 +104,7 @@ function compileFallbackOutput(gameEvents, worldDescription, flavorText, achieve
                 break;
 
             case 'entity_attack':
-                lines.push(`${event.attackerName} retaliates for ${event.damage} damage! [Your HP: ${event.playerHp}/${event.playerMaxHp}]`);
+                lines.push(`⚔ ${event.attackerName} attacks you for ${event.damage} damage! [Your HP: ${event.playerHp}/${event.playerMaxHp}]`);
                 break;
 
             case 'entity_killed':
@@ -113,6 +125,10 @@ function compileFallbackOutput(gameEvents, worldDescription, flavorText, achieve
 
             case 'item_pickup':
                 lines.push(`📦 Picked up: ${event.itemName} (${event.itemType}, ${event.itemTier})`);
+                break;
+
+            case 'item_spawn':
+                lines.push(`✨ You notice something in the debris: ${event.itemName} (${event.itemType}, ${event.itemTier})`);
                 break;
 
             case 'item_used':
@@ -179,6 +195,10 @@ function compileFallbackOutput(gameEvents, worldDescription, flavorText, achieve
 
             case 'error':
                 lines.push(`❌ ${event.message}`);
+                break;
+
+            case 'unknown_action':
+                lines.push(`❔ You attempt to "${event.text}". The System is not impressed.`);
                 break;
         }
     }

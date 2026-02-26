@@ -17,17 +17,21 @@ VALID ACTIONS AND THEIR REQUIRED FIELDS:
 - {"action": "equip", "target": "<item_name_or_partial>"}
 - {"action": "inventory"}
 - {"action": "stats"}
+- {"action": "map"}
 - {"action": "allocate", "target": "<stat_name: str|dex|con|int|wis|cha>"}
 - {"action": "open", "target": "<lootbox_name_or_partial>"}
 - {"action": "talk", "target": "<npc_name_or_partial>"}
+- {"action": "inspect", "target": "<item_name_or_partial>"}
+- {"action": "unknown", "text": "<the original text exactly as typed>"}
 
 RULES:
 1. ONLY return valid JSON. No explanation. No story text. No markdown.
 2. Match the user's intent to the closest valid action.
 3. For direction aliases: "north"→"n", "south"→"s", "east"→"e", "west"→"w".
-4. If intent is ambiguous, prefer "look" as the default.
+4. If the user types absolute nonsense or an impossible action (e.g. "take a nap", "dance", "eat my own foot"), map it to "unknown" and include their raw text to be mocked by the System.
 5. For targets, extract the key noun (e.g., "the goblin" → "goblin", "rusty pipe on the ground" → "rusty pipe").
-6. If the user describes a creative action, map it to the closest game mechanic.
+6. Requests to view a map, check location, or see where the player is should map to the "map" action.
+7. If the user describes a creative action, map it to the closest game mechanic.
 
 CONTEXT (current game state will be provided to help disambiguate):`;
 
@@ -50,14 +54,14 @@ async function parseInput(userInput, context = {}) {
 
         // Validate required fields
         if (!intent.action) {
-            return { action: 'look' };
+            return { action: 'unknown', text: userInput };
         }
 
         return intent;
     } catch (err) {
         console.warn('[InputParser] Failed to parse LLM response as JSON:', response);
         // Last resort: try basic parsing
-        return { action: 'look' };
+        return { action: 'unknown', text: userInput };
     }
 }
 

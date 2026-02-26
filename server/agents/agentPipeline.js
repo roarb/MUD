@@ -4,7 +4,7 @@
 // ============================================================
 const { parseInput } = require('./inputParser');
 const { describeRoom } = require('./worldBuilder');
-const { generateFlavorText, checkAchievement, evaluateBonusXp } = require('./showrunner');
+const { generateFlavorText, checkAchievement, evaluateBonusXp, generateItemInspection } = require('./showrunner');
 const { compileFinalOutput, compileFallbackOutput } = require('./gameMaster');
 const { processAction, checkLevelUp } = require('../engine/gameEngine');
 const { getDoc } = require('../firebase');
@@ -46,9 +46,11 @@ async function runPipeline(playerId, userInput) {
         // --- 4. Agents 2 & 3 in parallel ---
         const hasRoomEvent = events.some(e => e.type === 'room_description');
         const roomEvent = events.find(e => e.type === 'room_description');
+        const inspectEvent = events.find(e => e.type === 'item_inspected');
 
         let worldDescription = '';
         let flavorText = '';
+        let inspectionText = '';
         let achievement = null;
         let bonusXp = null;
 
@@ -62,6 +64,13 @@ async function runPipeline(playerId, userInput) {
                 );
             } else {
                 promises.push(Promise.resolve());
+            }
+
+            // Showrunner — Generate Item Inspection AI if requested
+            if (inspectEvent && inspectEvent.item) {
+                promises.push(
+                    generateItemInspection(inspectEvent.item).then(text => { inspectionText = text; })
+                );
             }
 
             // Showrunner — flavor text for interesting events
@@ -85,6 +94,22 @@ async function runPipeline(playerId, userInput) {
             if (achievement) {
                 updatedPlayer.achievements = updatedPlayer.achievements || [];
                 updatedPlayer.achievements.push(achievement);
+
+                if (achievement.tier) {
+                    const boxId = `${achievement.tier.toLowerCase()}_lootbox`;
+                    const boxItem = await getDoc('items', boxId);
+                    if (boxItem) {
+                        updatedPlayer.inventory = updatedPlayer.inventory || [];
+                        updatedPlayer.inventory.push({ ...boxItem });
+                        events.push({
+                            type: 'item_pickup',
+                            itemId: boxItem.itemId,
+                            itemName: boxItem.name,
+                            itemType: boxItem.type,
+                            itemTier: boxItem.tier,
+                        });
+                    }
+                }
             }
 
             // Apply bonus XP if awarded
@@ -96,18 +121,24 @@ async function runPipeline(playerId, userInput) {
                 events.push(...levelUpEvents);
             }
 
+            // check for map
+            const mapEvent = events.find(e => e.type === 'map_display');
+
             // Persist player if achievement or bonus XP changed state
             if (achievement || bonusXp) {
                 await playerState.savePlayer(updatedPlayer);
             }
 
             // --- 5. Agent 4: Game Master compiles final output ---
-            const finalText = await compileFinalOutput(events, worldDescription, flavorText, achievement, updatedPlayer);
-            return { text: finalText, events, achievement, player: updatedPlayer };
+            const finalText = await compileFinalOutput(events, worldDescription, flavorText, inspectionText, achievement, updatedPlayer);
+            return { text: finalText, events, achievement, player: updatedPlayer, mapString: mapEvent?.mapString };
         } else {
+            // check for map
+            const mapEvent = events.find(e => e.type === 'map_display');
+
             // Fallback mode — no LLM, use template formatting
-            const finalText = compileFallbackOutput(events, null, null, null, updatedPlayer);
-            return { text: finalText, events, achievement: null, player: updatedPlayer };
+            const finalText = compileFallbackOutput(events, null, null, null, null, updatedPlayer);
+            return { text: finalText, events, achievement: null, player: updatedPlayer, mapString: mapEvent?.mapString };
         }
 
     } catch (err) {

@@ -172,6 +172,11 @@ function generateFallbackIntent(input) {
         return JSON.stringify({ action: 'stats' });
     }
 
+    // Map
+    if (lower === 'map' || lower === 'show map' || lower === 'view map') {
+        return JSON.stringify({ action: 'map' });
+    }
+
     // Open
     if (lower.startsWith('open ')) {
         const target = lower.replace(/^open\s+/i, '').trim();
@@ -190,8 +195,8 @@ function generateFallbackIntent(input) {
         return JSON.stringify({ action: 'allocate', target: stat });
     }
 
-    // Default
-    return JSON.stringify({ action: 'look' });
+    // Default - Unknown
+    return JSON.stringify({ action: 'unknown', text: input });
 }
 
 module.exports = { callLLM };
